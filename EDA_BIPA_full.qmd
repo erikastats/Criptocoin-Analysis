@@ -1,0 +1,529 @@
+---
+title: "EDA BIPA"
+author: "Érika Borelli"
+format: html
+editor: visual
+---
+
+## Objetivo
+
+Este documento tem como objetivo fazer a análise exploratória dos dados que compõem o Desafio técnico para a vaga de Data Analytics na BIPA.
+
+## Importação dos dados
+
+Criando banco de dados
+
+```{r}
+#| include: false
+library(gt)
+library(ggplot2)
+library(hrbrthemes)
+library(tidyr)
+library(scales)
+```
+
+```{r}
+#| include: false
+source("ccreating_db.R")
+```
+
+Funções para importação dos dados
+
+```{r}
+import_data <- function(data_name){
+  query = paste0("SELECT * FROM ", data_name)
+  df = query_data(query)
+  colunas_tempo <- grep("_at$", names(df), value = TRUE)
+  
+  for (col in colunas_tempo) {
+    # Aplica conversão apenas se os valores forem numéricos inteiros grandes (ex: 1630378347)
+    if (is.numeric(df[[col]]) && all(df[[col]] > 1000000000, na.rm = TRUE)) {
+      df[[col]] <- as.POSIXct(df[[col]], origin = "1970-01-01", tz = "UTC")
+    }
+  }
+  
+  df
+}
+```
+
+Importando as tabelas para uma visualização mais fácil
+
+```{r}
+users = import_data("users")
+
+assets = import_data("assets")
+
+card_holder = import_data("card_holder")
+
+card_purchases = import_data("card_purchases")
+
+internal_transfers = import_data("internal_transfers")
+
+orders = import_data("orders")
+
+pix_transactions = import_data("pix_transactions")
+
+quotes = import_data("quotes")
+```
+
+## Exploração dos dados
+
+```{r}
+usuario_atividade = query_data("select 
+                                count(id) as quantidade_users,
+                                active
+                                from users
+                                group by active")
+usuario_atividade |> 
+  gt() |>
+  tab_header(
+    title = "Distribuição de usuários ativos"
+  )
+```
+
+Aqui já vemos que temos no total 10 usuários, mas 2 deles estão classificados como inativos. Porém, qual seria a definição de um usuário inativo?
+
+-   Alguém que fez a conta na BIPA e nunca interagiu com nada?
+
+-   Um usuário que cancelou a conta e não vai usar mais?
+
+Se fosse questão de cancelamento, seria interessante ter a data do cancelamento, mas como não tem, me faz pensar qeu é a primeira opção, ou algo diferente. Vou tentar descobrir analisando os dados.
+
+```{r}
+pix_direcao = query_data( " select
+                           count(id) total_pix,
+                           sum(amount_brl) total_amount,
+                           user_id,
+                           direction
+                           from pix_transactions
+                           group by user_id, direction")
+pix_direcao |> 
+  gt() |>
+  tab_header(
+    title = "Quantidade de transções pix por usuário"
+  )
+```
+
+Vemos que apesar do usuário id = 2 estar como inativo, ele utilizou a conta para fazer pix. Não há pix realizado para os usuários 1, 3, 5, 7 e 10.
+
+```{r}
+utili_cartao = query_data("with compras_cartao as (
+select
+user_id as usuario_do_cartao,
+card_id,
+count(id) as total_purchase
+from card_purchases
+group by user_id, card_id
+)
+
+select cc.*,
+ch.user_id as dono_cartao
+from compras_cartao as cc
+left join card_holder ch on cc.card_id = ch.card_id
+order by cc.card_id " )
+utili_cartao |> 
+  gt() |>
+  tab_header(
+    title = "Usuários que utilizaram o cartão da BIPA"
+  )
+```
+
+Aqui os dados já apresentam resultados um pouco estranhos. Foi identificado que todos os usuários que realizaram alguma compra utilizaram cartões de outo usuário (informação cruzada entre as tabelas `card_holder` e `card_purchases` ). Esse comportamento pode refletir uam simulação de cartões compartilhados ou uma inconsistência nos dados fictícios fornecidos. Para efeito das métricas desenvolvidas, considerou-se que a atividade de um usuário independe da titularidade do cartão utilizado.
+
+```{r}
+proposta_ativos = query_data("select
+                              count(id) total_proposta, 
+                              user_id, 
+                              side
+                              from quotes
+                              group by user_id, side
+                              ")
+proposta_ativos |> 
+  gt() |>
+  tab_header(
+    title = "Proposta de compra e venda de ativos"
+  )
+```
+
+Aqui é preciso olhar com mais cuidado no que está acontecendo. Vamos filtrar pelas propostas concluídas e adicionar o usuário em ordens.
+
+```{r}
+proposta_concluidas = query_data("with quotes_not_null as (select
+                              id, 
+                              user_id, 
+                              side
+                              from quotes
+                              where accepted_at is not null)
+                              
+                              select qnn.*,
+                              o.user_id as user_order
+                              from quotes_not_null qnn
+                              left join orders o on qnn.id = o.quote_id
+                              ")
+proposta_concluidas |> 
+  gt() |>
+  tab_header(
+    title = "Proposta de compra e venda de ativos concluídos"
+  )
+```
+
+Aqui vemos que ao juntar a tabela `quotes` com a tabela `orders` , os usuários de um certo quote_id não são os mesmos para ambas as tabelas, o que poderia indicar que provavelmente o usuário da tabela `quotes` abriu a ordem ali para comprar e vender algo, e já da tabela `orders` seria quem aceitou a transação. Algo do tipo:
+
+```         
+-   Um usuário cria a oferta (`quotes`)
+
+-   Outro usuário aceita a oferta (`orders`)
+```
+
+Porém, essa lógica falha ao verificar que o quote_id de número 13 tem o mesmo usuário em ambas as tabelas. O que pode significar o mesmo user_id em `quotes` e `orders`:
+
+1.  Autoexecução da própria oferta (self_trade):
+2.  bug no sistema ou nos dados simulados
+3.  Ordem pendente de execução
+4.  Sistema interno de roteamento
+
+A tabela `quotes` parece representar ofertas de compra e venda feitas por usuários, com os seguintes campos temporais:
+
+-   `created_at`: data de criação da oferta
+-   `expires_at`: data-limite sugerida para expiração
+-   `accepted_at`: data em que a oferta foi aceita
+-   `expired_at`: data em que a oferta foi marcada como expirada pelo sistema
+
+Ao inspecionar os dados, observei que:
+
+-   Nenhuma linha possui `accepted_at` **e** `expired_at` preenchidos simultaneamente.
+-   Existem ofertas aceitas **após** o `expires_at`, o que indica que o sistema permite execução mesmo após o prazo-limite.
+-   Em alguns casos, `created_at` vem **depois** do `expired_at`, o que pode indicar inconsistência nos dados ou simulações.
+
+Esses padrões serão considerados na análise de comportamento e métricas dos usuários.
+
+```{r}
+trans_inter = query_data(" with int_trans_send as (
+                          select
+                          sender_user_id as user_id,
+                          count(id) total_transf,
+                          sum(amount_brl) as total_amount
+                          from internal_transfers
+                          group by sender_user_id
+                          ),
+                          
+                          int_trans_recei as (
+                          select
+                          receiver_user_id as user_id,
+                          count(id) total_transf,
+                          sum(amount_brl) as total_amount
+                          from internal_transfers
+                          group by receiver_user_id
+                          )
+                          
+                          SELECT *,
+                          'sender' as tipo_trans
+                          FROM int_trans_send 
+                          union all 
+                          SELECT *, 
+                          'receiver' as tipo_trans
+                          FROM int_trans_recei
+                          order by user_id
+                          ")
+trans_inter |> 
+  gt() |>
+  tab_header(
+    title = "Transferência interna por usuário"
+  )
+```
+
+Aqui podemos observar que um dos usuários tidos como inativos (user_id = 10) recebeu uma transferência interna. Outro ponto a se chamar atenção é que na transferência interna id= 2, o mesmo usuário manda pra si mesmo. O que pode ocorrer caso seja transferências entre carteiras interna do mesmo usuário, conversão entre ativos, depósito de bonificação ou cashback automatizado, ou até mesmo erro dos dados gerados.
+
+```{r}
+query = "
+with dt_union as (
+select
+u.id,
+u.created_at,
+q.created_at as quote_created_at,
+ch.created_at as card_created_at,
+ch.updated_at as card_updated_at,
+pix.created_at as pix_created_at,
+o.created_at as order_created_at,
+cp.created_at as card_pu_created_at,
+cp.updated_at as card_pu_updated_at
+from users u
+left join quotes q on u.id = q.user_id
+left join card_holder ch on u.id = ch.user_id
+left join pix_transactions pix on u.id = pix.user_id
+left join orders o on u.id = o.user_id
+left join card_purchases cp on u.id = cp.user_id ),
+dt_union_pivot as (
+
+SELECT id, 'quote_created_at' AS nome_coluna, quote_created_at AS valor
+FROM dt_union
+
+UNION ALL
+
+SELECT id, 'card_created_at', card_created_at
+FROM dt_union
+
+UNION ALL
+
+SELECT id, 'card_updated_at', card_updated_at
+FROM dt_union
+
+UNION ALL
+
+SELECT id, 'pix_created_at', pix_created_at
+FROM dt_union
+
+UNION ALL
+
+SELECT id, 'order_created_at', order_created_at
+FROM dt_union
+
+UNION ALL
+
+SELECT id, 'card_pu_created_at', card_pu_created_at
+FROM dt_union
+
+UNION ALL
+
+SELECT id,  'card_pu_updated_at', card_pu_updated_at
+FROM dt_union),
+ordenado as(
+
+select distinct id,  nome_coluna, 
+datetime(valor, 'unixepoch') as date,
+row_number() over (partition by id order by datetime(valor, 'unixepoch') DESC) as rn
+from dt_union_pivot
+where valor is not null)
+
+select o.*,
+u.active
+from ordenado o
+left join users u on o.id = u.id
+where o.rn = 1
+"
+
+query_data(query) |> 
+  gt() |>
+  tab_header(
+    title = "Data da última atividade"
+  )
+```
+
+Por enquanto não achei nenhum padrão para inatividade. Então provavelmente seriam clientes que cancelaram a conta.
+
+## Visualizações
+
+Quando cada usuário criou uma conta
+
+```{r}
+query = "
+select id, datetime(created_at, 'unixepoch') as created_at, active
+from users"
+
+usuario_date <- query_data(query)
+
+ggplot(usuario_date,
+       aes(x  = created_at, y = id, shape = as.character(active) )) +
+  geom_point(size = 6) +
+  ggtitle("Data de criação do usuário") +
+  theme_ipsum()
+  
+```
+
+## Taxa de crescimento
+
+Para esta análise foi escolhido e utilizado o Growth rate como métrica para representar o crescimento dos produtos internos.
+
+$$
+\text{Taxa de Crescimento} = \frac{V_{\text{atual}} - V_{\text{anterior}}}{V_{\text{anterior}}} \times 100
+$$
+
+Taxa de crescimento por mês que teve novas entradas
+
+```{r}
+query = "WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_users_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM users
+  GROUP BY month
+),
+
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;
+
+"
+
+cum_month <- query_data(query)
+
+
+```
+
+```{r}
+cum_month |> 
+  mutate(growth_rate_percent = growth_rate_percent |> 
+           replace_na(0))  |> 
+  ggplot(aes(x = month, y = growth_rate_percent, group = 1)) +
+    geom_line() +
+  geom_point()
+```
+
+```{r}
+scaling_factor <- max(cum_month$new_users_count, na.rm = TRUE) / 
+                  max(cum_month$growth_rate_percent, na.rm = TRUE)
+
+ggplot(cum_month, aes(x = month)) +
+  geom_col(aes(y = new_users_count), fill = "skyblue", alpha = 0.6) +
+  geom_line(aes(y = growth_rate_percent * scaling_factor), color = "darkred", linewidth = 1.2, group = 1) +
+  scale_y_continuous(
+    name = "Novos usuários (absoluto)",
+    sec.axis = sec_axis(~./scaling_factor, name = "Taxa de Crescimento (%)")
+  ) +
+  labs(x = "Mês", title = "Crescimento mensal de usuários BIPA") +
+  theme_minimal() +
+  theme(
+    axis.title.y.right = element_text(color = "darkred"),
+    axis.text.y.right = element_text(color = "darkred")
+  )
+```
+
+```{r}
+growth_metric_plot <-  function(df, xtitle, plottitle, xcolname){
+  
+  id_col <- which(names(df) == xcolname)
+  names(df)[id_col] = 'date'
+  scaling_factor <- max(df$new_users_count, na.rm = TRUE) / 
+                  max(df$growth_rate_percent, na.rm = TRUE)
+
+ggplot(df, aes(x = date)) +
+  geom_col(  aes(y = new_users_count), fill = "#4e66e7", alpha = 0.6) +
+  geom_line( aes(y = growth_rate_percent * scaling_factor),
+              color = "darkred", linewidth = 1.2, group = 1) +
+  geom_text( aes(
+      y = growth_rate_percent * scaling_factor,
+      label = paste0( round(growth_rate_percent, 1), "%"),
+      ),
+      vjust = -0.5,
+      color = 'black',
+      size = 3, 
+      fontface = "plain",
+      show.legend = FALSE) +
+  scale_y_continuous(
+      name = "Novos usuários (absoluto)",
+      sec.axis = sec_axis(~./scaling_factor, name = "Taxa de Crescimento (%)")
+  ) +
+  labs(x = xtitle, title = plottitle) +
+  theme_minimal() +
+  theme(
+      axis.title.y.right = element_text(color = "darkred"),
+      axis.text.y.right = element_text(color = "darkred")
+  )
+}
+```
+
+```{r}
+growth_metric_plot(cum_month, "Mês","Crescimento mensal de usuários BIPA", 'month' )
+```
+
+Como a base de dados fornecida é uma **amostra** e não contém um histórico contínuo ou completo dos usuários ao longo do tempo, optei por **considerar apenas os meses com registros efetivos de novos usuários** para o cálculo da taxa de crescimento.\
+
+Essa abordagem evita distorções nos resultados e foca nos momentos em que houve de fato atividade relevante na plataforma.
+
+### Isso resolve 2 coisas ao mesmo tempo:
+
+1.  **Evita artificializar o tempo** com meses vazios (que poderiam enviesar a leitura).
+
+2.  **Simplifica a análise**, já que não é necessário gerar uma sequência mensal completa.
+
+```         
+`cumulative_users`: total de usuários acumulados até o mês atual
+
+`prev_cumulative`: total de usuários acumulados até o mês anterior (usando `LAG()`)
+```
+
+Outra informação importante é retirar os usuários inativos. COmo não há explicitamente quando os usuários ficaram inativos, levarei em consideração que ele ficou inativo após a data da sua última ação. E o que seria considerado "ação" neste caso:
+
+-   Criar um cartão
+
+-   Fazer uma compra
+
+-   Fazer uma transferência interna
+
+-   Criar um quote ou order
+
+-   Fazer um PIX
+
+Taxa de crescimento por ano
+
+```{r}
+query = "WITH year_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_users_count,
+    strftime('%Y', datetime(created_at, 'unixepoch')) AS year
+  FROM users
+  GROUP BY year
+),
+
+with_cumulative AS (
+  SELECT 
+    year,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY year) AS cumulative_users
+  FROM year_user
+),
+
+with_growth AS (
+  SELECT
+    year,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY year) AS prev_cumulative
+  FROM with_cumulative
+)
+
+SELECT 
+  year,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY year;
+
+"
+
+cum_year <- query_data(query)
+```
+
+```{r}
+growth_metric_plot(cum_year, "Ano","Crescimento anual de usuários BIPA", 'year' )
+```

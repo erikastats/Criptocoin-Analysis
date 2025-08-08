@@ -1,0 +1,9 @@
+id,user_id,direction,counterparty_key,counterparty_name,counterparty_bank,amount_brl,status,reason,created_at,completed_at,reversed_at
+1,6,received,irocha@example.com,Nicolas Duarte,Macedo,262.44,completed,,2025-07-06 15:30:23.415869,,
+2,2,sent,camargovicente@example.org,Laís Novaes,Moraes Melo e Filhos,4996.42,reversed,,2025-05-02 06:04:16.482569,,
+3,4,received,breno19@example.com,Gael Leão,Ribeiro Barros Ltda.,4181.78,pending,,2025-06-01 07:18:25.362900,,
+4,4,received,ana-sophia69@example.net,Maria Helena Rocha,Borges,4845.29,completed,,2025-03-22 21:02:51.854228,,
+5,4,sent,gomesmateus@example.com,Srta. Liz Guerra,Rocha das Neves S.A.,4632.57,reversed,,2025-03-26 04:16:59.879559,,
+6,9,sent,santosluiza@example.org,Agatha da Rosa,Casa Grande Alves S/A,4244.99,pending,,2025-02-01 01:59:13.954943,,
+7,8,received,emanuellalopes@example.org,Gustavo Henrique Lopes,Melo Pimenta S/A,839.89,reversed,,2025-05-25 19:59:48.527727,,
+8,3,sent,ana-sophia14@example.net,Luna Martins,Leão,2433.35,failed,,2025-07-08 00:28:49.699715,,

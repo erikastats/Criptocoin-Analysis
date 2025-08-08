@@ -1,0 +1,220 @@
+---
+title: "Desafio Técnico - Vaga de Data Analytics - BIPA"
+author: "Érika S.M. Borelli"
+format: pdf
+editor: visual
+---
+
+## Introdução
+
+O objetivo deste desafio é entender como as operações e produtos da BIPA estão contribuindo para o crescimento da empresa com base em dados simulados de operações reais. Para isso será proposta uma métrica que reflita este crescimento e que traga insights que serão usados para orientar decisões estratégicas. Este tipo de análise é essencial para medir o sucesso da plataforma, identificar oportunidades de monetização e garantir um crescimento sustentável.
+
+Para definir uma métrica significativa da relação entre as operações e produtos com o crescimento da emrpesa, inicialmente foram realizadas etapas exploratórias e de entendimento dos dados, com atenção especial à consistência das informações e à jornada dos usuários na plataforma. Com isso, a métrica proposta foi um Growth Rate baseada na utilização dos produtos e operações pelos usuários.
+
+## Métrica principal
+
+Para este desafio usaremos a Growth Rate, ou Taxa de Crescimento. Ela é um indicador percentual que mede o aumento de um valor ao longo do tempo.
+
+$$
+\text{Growth Rate} = \frac{V_{\text{Usuários Atuais}} - V_{\text{Usuários do Período Anterior}}}{V_{\text{Usuários do Período Anterior}}} \times 100
+$$
+
+Normalmente é calculada em diferente períodos (mensal, trimestral, anual) e é fundamental para analisar tendências e fazer projeções. A usaremos como taxa mensal e anual, porém como a base de dados fornecida é uma amostra simulada e não contém um histórico contínuo ou completo dos usuários ao longo do tempo, optei por considerar apenas os meses com registros efetivos dos usuários para o cálculo da taxa de crescimento. Essa abordagem evita distorções nos resutlados e foca nos momentos em que houve de fato atividade relevante na plataforma.
+
+Outra informação importante será a retirada os usuários inativos após a data da sua última ação na plataforma, pois não há explicitamente quando os usuários ficaram inativos. O que será considerado "ação" neste caso é:
+
+-   Criar um cartão
+
+-   Fazer uma compra com cartão
+
+-   Fazer ou receber uma transferência interna
+
+-   Criar um quote ou order
+
+-   Fazer um pix
+
+## Análise
+
+```{r}
+#| include: true
+#| message: false
+#| error: false
+
+# Bibliotecas
+library(gt)
+library(ggplot2)
+library(hrbrthemes)
+library(tidyr)
+library(scales)
+
+# Importando banco de dados
+source("ccreating_db.R")
+```
+
+```{r}
+#| include: true
+#| message: false
+#| error: false
+
+### Funções
+
+#' Executa uma query SQL e retorna os resultados como data frame
+#'
+#' Esta função executa uma consulta SQL no banco de dados conectado via `con`
+#' e retorna os resultados como um data frame.
+#'
+#' @param query String. Uma string contendo a instrução SQL a ser executada.
+#'
+#' @return Data frame com os resultados da query.
+#'
+#' @examples
+#' query_data("SELECT * FROM users LIMIT 5")
+query_data <- function(query){
+  dbGetQuery(con, query)
+}
+
+
+#' Importa dados do banco e converte colunas de timestamp
+#'
+#' Esta função importa uma tabela do banco de dados SQLite e converte automaticamente
+#' as colunas que terminam com "_at" para o formato POSIXct, caso estejam em Unix timestamp.
+#'
+#' @param data_name String. Nome da tabela no banco de dados que será importada.
+#'
+#' @return Data frame com os dados da tabela e colunas de data (terminadas em "_at")
+#' convertidas para o formato POSIXct.
+#'
+#' @examples
+#' quotes_df <- import_data("quotes")
+#' head(quotes_df)
+import_data <- function(data_name){
+  query = paste0("SELECT * FROM ", data_name)
+  df = query_data(query)
+  colunas_tempo <- grep("_at$", names(df), value = TRUE)
+  
+  for (col in colunas_tempo) {
+    # Aplica conversão apenas se os valores forem numéricos inteiros grandes (ex: 1630378347)
+    if (is.numeric(df[[col]]) && all(df[[col]] > 1000000000, na.rm = TRUE)) {
+      df[[col]] <- as.POSIXct(df[[col]], origin = "1970-01-01", tz = "UTC")
+    }
+  }
+  
+  df
+}
+
+#' @title Plotagem de Métrica de Crescimento com Eixo Secundário
+#' 
+#' @description 
+#' Gera um gráfico de barras e linha em um mesmo painel, exibindo o número absoluto de novos usuários 
+#' e a taxa de crescimento percentual sobre um eixo secundário.
+#' 
+#' @param df Um data.frame contendo pelo menos três colunas: a coluna de data (ou período), 
+#' o número de novos usuários (`new_users_count`) e a taxa de crescimento (`growth_rate_percent`).
+#' @param xtitle Um string com o título do eixo X (ex: `"Mês"`).
+#' @param plottitle Um string com o título do gráfico (ex: `"Crescimento Mensal de Usuários"`).
+#' @param xcolname Nome da coluna de data/período no data frame `df`. Será renomeada internamente para `'date'`.
+#' 
+#' @return Um gráfico `ggplot2` com:
+#' - Barras representando o número absoluto de novos usuários
+#' - Linha e rótulos indicando a taxa de crescimento percentual
+#' - Eixo Y secundário para a taxa de crescimento
+#' 
+#' @examples
+#' growth_metric_plot(df = dados_mensais, 
+#'                    xtitle = "Mês", 
+#'                    plottitle = "Crescimento da Base de Usuários", 
+#'                    xcolname = "month")
+#' 
+#' @import ggplot2
+#' @export
+growth_metric_plot <-  function(df, xtitle, plottitle, xcolname){
+  
+  id_col <- which(names(df) == xcolname)
+  names(df)[id_col] = 'date'
+  scaling_factor <- max(df$new_users_count, na.rm = TRUE) / 
+                  max(df$growth_rate_percent, na.rm = TRUE)
+
+ggplot(df, aes(x = date)) +
+  geom_col(  aes(y = new_users_count), fill = "#4e66e7", alpha = 0.6) +
+  geom_line( aes(y = growth_rate_percent * scaling_factor),
+              color = "darkred", linewidth = 1.2, group = 1) +
+  geom_text( aes(
+      y = growth_rate_percent * scaling_factor,
+      label = paste0( round(growth_rate_percent, 1), "%"),
+      ),
+      vjust = -0.5,
+      color = 'black',
+      size = 3, 
+      fontface = "plain",
+      show.legend = FALSE) +
+  scale_y_continuous(
+      name = "Novos usuários (absoluto)",
+      sec.axis = sec_axis(~./scaling_factor, name = "Taxa de Crescimento (%)")
+  ) +
+  labs(x = xtitle, title = plottitle) +
+  theme_minimal() +
+  theme(
+      axis.title.y.right = element_text(color = "darkred"),
+      axis.text.y.right = element_text(color = "darkred")
+  )
+}
+```
+
+A análise foi realizada considerando a base de clientes como um todo, bem como segmentações por cada produto e operação.
+
+#### Crescimento periódico de usuários BIPA
+
+Analisando os usuários mensalmente, por meses que teve entrada de novos usuários identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- Contagem de usuários únicos criados por mês/Ano
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_users_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM users
+  GROUP BY month
+),
+
+-- Com o resultado de month_user, acrescentar o valor acumulativo de total de novos usuários por mês/Ano
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;
+
+"
+
+
+```
+
+```{r}
+cum_month <- query_data(query)
+```
+
+## Conclusão

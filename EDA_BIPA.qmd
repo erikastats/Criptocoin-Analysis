@@ -1,0 +1,49 @@
+---
+title: "EDA"
+author: "Érika Borelli"
+format: pdf
+editor: visual
+---
+
+## Objetivo
+
+Este domundo tem como objetivo o entendimento dos dados do Desafio Técnico para a vaga de Data Analytics na BIPA.
+
+O desafio consiste em
+
+## Dados
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+#| echo: false
+#| include: false
+
+
+source("ccreating_db.R")
+
+import_data <- function(query){
+  dbGetQuery(con, query)
+}
+```
+
+### Análise
+
+```{r}
+query = "SELECT * FROM users"
+users = import_data(query)
+
+query = "select * from assets"
+assets = import_data(query)
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).

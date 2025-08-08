@@ -1,0 +1,7 @@
+id,sender_user_id,sender_user_tag,receiver_user_id,receiver_user_tag,amount_brl,message,status,reason,created_at,completed_at,reversed_at
+1,8,@vasconceloslais,4,@cnovaes,70.35,Tempora aspernatur corrupti fugit corrupti distinctio.,pending,,2025-02-24 19:06:53.834319,,
+2,5,@luiz-gustavosampaio,5,@maria-lauramachado,320.47,Illum molestiae impedit dignissimos in temporibus.,pending,,2025-03-10 22:47:56.114970,,
+3,7,@jaragao,4,@thales48,59.64,Veniam accusantium sunt nemo labore velit error harum.,completed,,2025-04-06 18:32:54.278518,,
+4,9,@joaquimmarques,1,@ppires,482.02,Modi quasi reiciendis tempore laborum earum.,pending,,2025-03-13 02:05:50.736536,,
+5,8,@maria-fernandarios,10,@lunna14,920.19,Adipisci excepturi perspiciatis illo cumque iusto consectetur.,pending,,2025-07-05 06:39:50.181778,,
+6,3,@luisa98,9,@yagofarias,535.81,Modi tenetur nihil optio assumenda inventore sint delectus.,completed,,2025-02-28 14:36:49.333414,,
