@@ -1,0 +1,147 @@
+
+# Bibliotecas -------------------------------------------------------------
+
+
+# Importando banco de dados
+source("ccreating_db.R")
+source("funcoes_ciptocoin_analysis.R")
+
+
+# Pedido de cartao --------------------------------------------------------
+
+
+# Primeira adoção de novos usuários pedindo cartão
+Q3 = query_primeira_adocao_gr(table = "card_holder",
+                              colname = "card",
+                              title = "pedido de cartão",
+                              period = "month")
+cum_month_card <- query_data(Q3)
+
+# Cartões novos
+Q4 = query_novos_produtos_gr(table = "card_holder",
+                             colname = "cards",
+                             title = "novos cartões",
+                             period = "month")
+
+cum_month_card_id <- rename(query_data(Q4),
+                            new_users_count = new_cards_count)
+
+# MAU cartões novos
+Q5 <-  query_mau_produto_gr(table = "card_holder")
+
+mau_card_gr <- query_data(Q5)
+
+
+# Compras no cartão -------------------------------------------------------
+
+# Primeira compra no cartão de cada usuário
+Q6 <-  query_primeira_adocao_gr(table = "card_purchases",
+                              colname = "purchase",
+                              title = "compra no cartão",
+                              period = "month")
+cum_purchase <- query_data(Q6)
+
+# Compras efetuadas com cartão Bipa por mês
+Q7 <-  query_novos_produtos_gr(table = "card_purchases",
+                             colname = "purchase",
+                             title = "compras no cartão",
+                             period = "month")
+cum_purchase_id <- query_data(Q7)
+
+# MAU compras no cartão
+
+Q8 <-  query_mau_produto_gr(table = "card_purchases")
+
+mau_purchase_gr <- query_data(Q8)
+
+
+# Transações PIX ----------------------------------------------------------
+
+# Quantidade de transações PIX em relação ao período anterior por usuário
+Q9 = query_primeira_adocao_gr(table = "pix_transactions",
+                              colname = "PIX",
+                              title = "transação PIX",
+                              period = "month")
+cum_PIX_user <- query_data(Q9)
+
+# Quantidade de transações PIX em relação ao período anterior
+Q10 = query_novos_produtos_gr(table = "pix_transactions",
+                             colname = "pix",
+                             title = "transações Pix",
+                             period = "month")
+cum_PIX <- query_data(Q10)
+
+# MAU transações pix
+
+Q11 <-  query_mau_produto_gr(table = "pix_transactions")
+
+mau_pix_gr <- query_data(Q11)
+
+
+# Transações internas -----------------------------------------------------
+
+# Transações internas em relação ao período anterior por usuário novo
+Q12 = query_transacao_interna_cada_usuario
+
+cum_transaction_user <-    query_data(Q12)
+
+# Transações internas por mês
+Q13 = query_novos_produtos_gr(table = "internal_transfers",
+                              colname = "it",
+                              title = "transações internas",
+                              period = "month")
+
+cum_transaction <-    query_data(Q13)
+
+# MAU transações internas
+
+Q14 <-  query_mau_produto_gr(table = "internal_transfers")
+
+mau_internaltransfers_gr <- query_data(Q14)
+
+
+# Quotes ------------------------------------------------------------------
+
+# Quantidade de quotes geradas por novo usuário
+Q15 = query_primeira_adocao_gr(table = "quotes",
+                               colname = "quote",
+                               title = "quote",
+                               period = "month")
+cum_quotes_user <- query_data(Q15)
+
+# Quotes geradas
+Q16 = query_novos_produtos_gr(table = "quotes",
+                              colname = "quotes",
+                              title = "quotes",
+                              period = "month")
+
+cum_quotes <-    query_data(Q16)
+
+# MAU quotes
+Q17 = query_mau_produto_gr(table = "quotes")
+
+mau_quotes <-    query_data(Q17)
+
+
+# Orders ------------------------------------------------------------------
+
+# Quantidade de orders geradas por novo usuário
+Q18 = query_primeira_adocao_gr(table = "orders",
+                               colname = "order",
+                               title = "order",
+                               period = "month")
+cum_orders_user <- query_data(Q18)
+
+# Orders geradas
+Q19 = query_novos_produtos_gr(table = "orders",
+                              colname = "order",
+                              title = "order",
+                              period = "month")
+
+cum_order <-    query_data(Q19)
+
+# MAU orders
+
+Q20 = query_mau_produto_gr(table = "orders")
+
+mau_orders <-    query_data(Q20)

@@ -52,6 +52,7 @@ Essa definição garante que a taxa de crescimento reflita variações reais na 
 library(gt)
 library(ggplot2)
 library(hrbrthemes)
+library(dplyr)
 library(tidyr)
 library(scales)
 
@@ -60,6 +61,9 @@ source("ccreating_db.R")
 
 # Importando funções
 source("funcoes_ciptocoin_analysis.R")
+
+# Importando tables
+source("build_tables.R")
 ```
 
 #### 1. Growth Rate geral da base engajada (mensal)
@@ -69,142 +73,481 @@ source("funcoes_ciptocoin_analysis.R")
 #| error: false
 #| echo: false
 #| warning: false 
-Q1 = "
--- 1. Contagem de novos usuários por mês
-WITH month_user AS (
-  SELECT 
-    COUNT(DISTINCT id) AS new_users_count,
-    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
-  FROM users
-  GROUP BY month
-),
-
--- 2. Cálculo acumulado de novos usuários
-with_cumulative AS (
-  SELECT 
-    month,
-    new_users_count,
-    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
-  FROM month_user
-),
-
--- 3. Cálculo da base acumulada do mês anterior
-with_growth AS (
-  SELECT
-    month,
-    new_users_count,
-    cumulative_users,
-    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
-  FROM with_cumulative
-),
-
--- 4. Criação da tabela com as últimas atividades dos usuários inativos
-dt_union AS (
-  SELECT
-    u.id,
-    u.created_at,
-    q.created_at AS quote_created_at,
-    ch.created_at AS card_created_at,
-    ch.updated_at AS card_updated_at,
-    pix.created_at AS pix_created_at,
-    o.created_at AS order_created_at,
-    cp.created_at AS card_pu_created_at,
-    cp.updated_at AS card_pu_updated_at
-  FROM users u
-  LEFT JOIN quotes q ON u.id = q.user_id
-  LEFT JOIN card_holder ch ON u.id = ch.user_id
-  LEFT JOIN pix_transactions pix ON u.id = pix.user_id
-  LEFT JOIN orders o ON u.id = o.user_id
-  LEFT JOIN card_purchases cp ON u.id = cp.user_id
-  WHERE u.active = 0
-),
-
--- 5. Reorganizando os timestamps em formato 'long'
-dt_union_pivot AS (
-  SELECT id, 'quote_created_at' AS nome_coluna, quote_created_at AS valor FROM dt_union
-  UNION ALL
-  SELECT id, 'card_created_at', card_created_at FROM dt_union
-  UNION ALL
-  SELECT id, 'card_updated_at', card_updated_at FROM dt_union
-  UNION ALL
-  SELECT id, 'pix_created_at', pix_created_at FROM dt_union
-  UNION ALL
-  SELECT id, 'order_created_at', order_created_at FROM dt_union
-  UNION ALL
-  SELECT id, 'card_pu_created_at', card_pu_created_at FROM dt_union
-  UNION ALL
-  SELECT id, 'card_pu_updated_at', card_pu_updated_at FROM dt_union
-),
-
--- 6. Ordenando para pegar a última atividade de cada usuário inativo
-ordenado AS (
-  SELECT DISTINCT 
-    id,
-    nome_coluna,
-    datetime(valor, 'unixepoch') AS date,
-    ROW_NUMBER() OVER (PARTITION BY id ORDER BY datetime(valor, 'unixepoch') DESC) AS rn
-  FROM dt_union_pivot
-  WHERE valor IS NOT NULL
-),
-
--- 7. Mantendo apenas a última atividade registrada
-last_actions AS (
-  SELECT * FROM ordenado WHERE rn = 1
-),
-
--- 8. Contando os usuários inativos por mês de sua última ação
-inativos_mes AS (
-  SELECT 
-    strftime('%Y-%m', datetime(date)) AS month,
-    COUNT(DISTINCT id) AS users_deactive
-  FROM last_actions
-  GROUP BY month
-)
-
--- 9. Cálculo final da taxa de crescimento com ajuste por usuários inativos
-SELECT 
-  wg.month,
-  wg.new_users_count,
-  wg.cumulative_users,
-  wg.prev_cumulative,
-  CASE 
-    WHEN wg.prev_cumulative IS NULL OR wg.prev_cumulative = 0 THEN NULL
-    ELSE ROUND((wg.cumulative_users - wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 1.0 / 
-                (wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 100, 2)
-  END AS growth_rate_percent
-FROM with_growth wg
-LEFT JOIN inativos_mes i ON wg.month = i.month
-ORDER BY wg.month;
-
-"
+Q1 = query_growth_rate_geral( timeformat = "%Y-%m",
+                              colname = "month",
+                              title = "mês"
+                              )
 
 cum_month <- query_data(Q1)
 growth_metric_plot(df = cum_month,
                    xtitle = "Mês",
                    plottitle = "Crescimento mensal de usuários BIPA",
                    xcolname = "month",
-                   caption_text = "Fonte: Query Q1 — cálculo de novos usuários e growth")
+                   caption_text = "Fonte: Query Q1 (Apêndice A) — cálculo de novos usuários e growth mensal")
 
 ```
+
+O gráfico mostra que, ao longo do tempo, a quantidade absoluta de novos usuários se manteve relativamente constante, com exceção de novembro de 2024, quando houve um pico no número de cadastros. No entanto, como a base de usuários acumulada cresce a cada período, a taxa percentual de crescimento tende a diminuir. Isso é esperado em bases com crescimento linear, mas acumulativo. Mesmo com novos usuários entrando, o impacto relativo em relação ao total é cada vez menor.
+
+#### 2. Growth Rate geral da base engajada (anual)
+
+```{r Q2}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+Q2 = query_growth_rate_geral( timeformat = "%Y",
+                              colname = "year",
+                              title = "ano"
+                              )
+
+cum_year <- query_data(Q2)
+growth_metric_plot(df = cum_year,
+                   xtitle = "Ano",
+                   plottitle = "Crescimento anual de usuários BIPA",
+                   xcolname = "year",
+                   caption_text = "Fonte: Query Q2 (Apêndice A) — cálculo de novos usuários e growth anual")
+```
+
+A análise anual reforça a tendência de queda na taxa de crescimento da base de usuários da BIPA. Apesar de o número absoluto de novos usuários ter se mantido estável em 2024 e 2025, o crescimento líquido em 2025 foi nulo, devido à inativação de dois usuários, o mesmo número de novos cadastros registrados no ano.
+
+Essa desaceleração constante nas taxas de crescimento, apesar do número relativo absoluto de novos usuários se matner relativament estável, sugere que a base total está crescendo lentamente ou até se estagnando. O que indica uma possível saturação do público-alvo, redução de aquisição de novos clientes ou desafios em estratégias de retenção e atração.
+
+#### 3. Engajamento por produto - primeira adoção
+
+Mede o momento em que cada usuário usa o produto pela primeira vez
 
 ```{r}
-Q1
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+
+library(dplyr)
+library(ggplot2)
+
+adocao <- bind_rows(
+  mutate(cum_month_card,        produto = "Cartão (Q3)"),
+  mutate(cum_purchase,          produto = "Compra no cartão (Q6)"),
+  mutate(cum_PIX_user,          produto = "PIX (Q9)"),
+  mutate(cum_transaction_user,  produto = "Transf. interna (Q12)"),
+  mutate(cum_quotes_user,       produto = "Quote (Q15)"),
+  mutate(cum_orders_user,       produto = "Order (Q18)")
+) %>%
+  mutate(month = as.Date(paste0(month, "-01"))) %>%
+  group_by(produto) %>%
+  mutate(
+    max_bar = max(new_users_count, na.rm = TRUE),
+    max_gr  = max(growth_rate_percent, na.rm = TRUE),
+    scale   = ifelse(is.finite(max_bar/max_gr) & max_gr > 0, max_bar/max_gr, 1),
+    growth_scaled = growth_rate_percent * scale
+  ) %>%
+  ungroup()
+
+# último ponto válido de growth para rotular
+labels_df <- adocao %>%
+  filter(!is.na(growth_rate_percent)) %>%
+  group_by(produto) %>%
+  slice_tail(n = 1) %>%
+  mutate(lbl = paste0(round(growth_rate_percent, 1), "%"))
+
+ggplot(adocao, aes(x = month)) +
+  geom_col(aes(y = new_users_count, fill = "Novos usuários"), alpha = 0.6) +
+  geom_line(aes(y = growth_scaled, color = "Growth rate"),
+            linewidth = 0.9, na.rm = TRUE) +
+  geom_point(aes(y = growth_scaled, color = "Growth rate"),
+             size = 1.8, na.rm = TRUE) +
+  # rótulos em escala reescalada (mesma da linha), mas mostrando o %
+  geom_text(
+    aes(y = growth_scaled, label = paste0(round(growth_rate_percent, 1), "%")),
+    vjust = -0.4, size = 3, color = "darkred", na.rm = TRUE
+  ) +
+  facet_wrap(~ produto, ncol = 3, scales = "free_y") +
+  scale_fill_manual(name = NULL, values = c("Novos usuários" = "#4e66e7")) +
+  scale_color_manual(name = NULL, values = c("Growth rate" = "darkred")) +
+  scale_y_continuous(
+    name = "Novos usuários (absoluto)",
+    expand = expansion(mult = c(0, 0.12))  # espaço para os rótulos acima
+  ) +
+  labs(
+    title   = "Primeira adoção por produto (mensal)",
+    x       = "Mês",
+    caption = "Fonte: Q3, Q6, Q9, Q12, Q15, Q18 (Apêndice A)"
+  ) +
+  coord_cartesian(clip = "off") +  # permite rótulos passarem um pouco do topo
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "bottom",
+    strip.text      = element_text(face = "bold"),
+    plot.caption    = element_text(hjust = 0, size = 8)
+  )
+
 ```
+
+-   **Picos iniciais seguidos de queda acentuada** - A maioria dos produtos apresentou crescimento na primeira adoção nos primeiros meses, mas houve forte retração subsequente, sugerindo que o lançamento ou campanhas iniciais atraíram mais usuários do que períodos posteriores.
+
+-   **Produtos com baixa recorrência de adoção** - “Compra no cartão” e “Orders” mostram números absolutos baixos e pouco crescimento ao longo do tempo, indicando que poucos novos usuários aderem mensalmente a essas funcionalidades.
+
+-   **Diferentes padrões de retenção pós-adoção** - O PIX e as transferências internas, apesar de quedas no growth rate, mantêm um número absoluto de novos usuários relativamente constante em alguns meses, sugerindo potencial de estabilização da adoção.
+
+#### 4. Engajamento por novos eventos
+
+Mede o volume de novos registros/ações (cartões emitidos, compras realizadas, etc). Pode incluir ações repetidas de um mesmo usuário.
+
+#### 5. Engajamento por produto
+
+Mede quantos usuários únicos usaram o produto no mês, independente de ser a primeira vez ou não
+
+código fact MAU por produto e growth (independe de primeira adoção)
+
+3 bullets de insight
+
+```{r}
+
+```
+
+#### Engajamento multi-produto
+
+```{r}
+
+```
+
+gráfico 1: usuários \>- 2 produtos (barras) + % sobre MAU (linha)
+
+gráfico 2: participação dos TOP combos por mês
+
+2 bullets (profundidade de uso + combos líderes)
 
 ## Recomendações
 
+3-5 bullets, diretas e acionáveis
+
 ## Limitações e próximos passos
 
-## Anexos
+Base simulada, meses sem atividade, baixa contagem
 
-### Anexo A - SQL completo (com índice)
+## Apêndices
 
-#### Q1 - Unificação de transações
+### Apêndice A - SQL completo
 
-*Objetivo*: padronizar todas as operações em um só conjunto para cálculo de KPIs
+#### Q1 - Growth de usuários com ajuste de inativos mensal
 
-*Entrada*: `orders` , `card_purchases`, `pix_transactions`, `internal_transfers`
+*Objetivo*: medir o crescimento real de usuários ativos ao longo do tempo mensalmente, descontando aqueles que ficaram inativos.
 
-*Saída*: ...
+*Entrada*: `users`, `card_purchases`, `pix_transactions`, `internal_transfers` , `quotes`, `card_holder`, `orders`
+
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q1, "Q1", "Growth de usuários com ajuste de inativos mensal")
+```
+
+#### Q2 - Growth de usuários com ajuste de inativos anual
+
+*Objetivo*: medir o crescimento real de usuários ativos ao longo do tempo anualmente, descontando aqueles que ficaram inativos.
+
+*Entrada*: `users`, `card_purchases`, `pix_transactions`, `internal_transfers` , `quotes`, `card_holder`, `orders`
+
+*Saída*: `table(year, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q2, "Q2", "Growth de usuários com ajuste de inativos anual")
+```
+
+#### Q3 - Growth da primeira adoção de cartão por usuário
+
+*Objetivo*: Medir a taxa de crescimento da primeira adoção de cartão (primeiro cartão por usuário) ao longo do tempo. A métrica mostra como evolui o número de usuários que passam a ter cartão pela primeira vez em cada mês. Ou seja, crescimento de ativação inicial do produto “cartão”, não de uso recorrente
+
+*Entrada*: `card_holder`
+
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent,avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q3, "Q3", "Growth de usuários com primeiro cartão por mês")
+```
+
+#### Q4 - Growth de Emissão de Novos Cartões
+
+*Objetivo*: mensurar a taxa de crescimento mensal no número de novos cartões emitidos, considerando o total acumulado ao longo do tempo.
+
+*Entrada*: `card_holder`
+
+*Saída*: `table(month, new_cards_count, cumulative_cards, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q4, "Q4", "Growth de emissão de novos cartões por mês")
+```
+
+#### Q5 - Growth de usuários ativos no cartão por mês
+
+*Objetivo*: calcular o número de usuários ativos de cartão em cada mês e medir a taxa de crescimento percentual em relação ao mês anterior.
+
+*Entrada*: `card_holder`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q5, "Q5", "Growth de usuários ativos no cartão por mês")
+```
+
+#### Q6 - Growth da primeira compra em cartão dos usuários por mês
+
+*Objetivo*: calcular a taxa de crescimento mensal de usuários que realizaram sua primeira compra com cartão, considerando o número acumulado ao longo do tempo.
+
+*Entrada*: `card_purchase`
+
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q6, "Q6", "Growth de primeira compra em cartão por mês")
+```
+
+#### Q7 - Growth de compras em cartões BIPA por mês
+
+*Objetivo*: Medir a evolução mensal no volume de compras realizadas com cartão, calculando a taxa de crescimento em relação ao mês anterior com base no número acumulado de transações.
+
+*Entrada*: `card_purchase`
+
+*Saída*: `table(month, new_purchase_count, cumulative_purchase, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q7, "Q7", "Growth de compras em cartão BIPA por mês")
+```
+
+#### Q8 - Growth de usuários que compram com cartão no mês
+
+*Objetivo*: calcular, mês a mês, quantos usuários únicos fizeram ao menos uma compra com cartão e a sua taxa de crescimento.
+
+*Entrada*: `card_purchase`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q8, "Q8", "Growth de usuários que compram com cartão por mês")
+```
+
+#### Q9 - Growth de usuários que realizaram a primeira transação PIX por mês
+
+*Objetivo*: Medir o crescimento no número de usuários que realizaram sua primeira transação via PIX, calculando a taxa de crescimento mensal em relação ao mês anterior com base no volume acumulado.
+
+*Entrada*: `pix_transactions`
+
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q9, "Q9", "Growth de primeria transação PIX por mês")
+```
+
+#### Q10 - Growth de transações Pix por mês
+
+*Objetivo*: Medir o crescimento no número total de transações PIX realizadas, calculando a taxa de crescimento mensal em relação ao volume acumulado do mês anterior.
+
+*Entrada*: `pix_transactions`
+
+*Saída*: `table(month, new_pix_count, cumulative_pix, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q10, "Q10", "Growth transação PIX por mês")
+```
+
+#### Q11 - Growth de usuários ativos em transações Pix por mês
+
+*Objetivo*: calcular, para cada mês, o número de usuários únicos que realizaram ao menos uma transação PIX e calcular a taxa de crescimento percentual desse volume em relação ao mês anterior, permitindo acompanhar a evolução do engajamento mensal do uso de PIX.
+
+*Entrada*: `pix_transactions`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q11, "Q11", "Growth de usuários ativos usando PIX por mês")
+```
+
+#### Q12 - Growth de usuários com primeira transação interna por mês
+
+*Objetivo*: Medir o crescimento no número de usuários que realizaram sua primeira transação interna (seja como remetente ou destinatário), calculando a taxa de crescimento mensal em relação ao total acumulado até o mês anterior.
+
+*Entrada*: `internal_transfers`
+
+*Saída*: `table(month, new_users_count, cumulative_usrs, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q12, "Q12", "Growth transação interna do usuário por mês")
+```
+
+#### Q13. Growth de transações internas por mês
+
+*Objetivo*: Medir o crescimento no número total de transações internas realizadas, calculando a taxa de crescimento mensal em relação ao volume acumulado até o mês anterior.
+
+*Entrada*: `internal_transfers`
+
+*Saída*: `table(month, new_it_count, cumulative_it, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q13, "Q13", "Growth transação interna por mês")
+```
+
+#### Q14 - Growth de usuários ativos em transações internas por mês
+
+*Objetivo*: Calcular, mensalmente, a quantidade de usuários únicos que participaram de transações internas, seja como remetentes ou destinatários, e medir a taxa de crescimento percentual desse volume em relação ao mês anterior, permitindo avaliar a evolução do uso da funcionalidade de transferências internas.
+
+*Entrada*: `internal_transactions`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q14, "Q14", "Growth de usuários ativos fazerndo transação interna por mês")
+```
+
+#### Q15 - Growth de usuários com primeira criação de quote por mês
+
+*Objetivo*: Medir o crescimento no número de usuários que criaram sua primeira quote no período, calculando a taxa de cresicmento mensal em relação ao total acumulado até o mês anterior.
+
+*Entrada*: `quotes`
+
+*Saída*: `table(month, new_users_count, cumulative_usrs, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q15, "Q15", "Growth de usuários criando quotes por mês")
+```
+
+#### Q16 - Growth de quotes criadas por mês
+
+*Objetivo*: Medir o crescimento no núemro total de quotes criadas por mês, calculando a taxa de crescimento em relação ao total acumulado até o mês anterior.
+
+*Entrada*: `quotes`
+
+*Saída*: `table(month, new_quotes_count, cumulative_quotes, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q16, "Q16", "Growth de quotes por mês")
+```
+
+#### Q17 - Growth de usuários ativos gerando quotes por mês
+
+*Objetivo*: Identificar, para cada mês, o número de usuários únicos que criaram pelo menos uam quote e calcular a taxa percentual de crescimento desse volume em relação ao mês anterior, permitindo acompanhar a evolução do engajamento dos usuários com a funcionalidade de geração de cotações.
+
+*Entrada*: `quotes`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q17, "Q17", "Growth de usuários ativos gerando quotes por mês")
+```
+
+#### Q18 - Growth de usuários realizando a primeira order por mês
+
+*Objetivo*: Medir o crescimento no número de usuários que realizaram seu primeiro *order* a cada mês, calculando a taxa de crescimento em relação ao acumulado de meses anteriores.
+
+*Entrada*: `orders`
+
+*Saída*: `table(month, new_users_count, cumulative_usrs, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q18, "Q18", "Growth de usuários realiznado a primeira order por mês")
+```
+
+#### Q19 - Growth de orders criadas por mês
+
+*Objetivo*: Medir o crescimento no número de orders criadas por mês, calculando a taxa de crescimento em relação ao acumulado do mês anterior.
+
+*Entrada*: `orders`
+
+*Saída*: `table(month, new_order_count, cumulative_order, prev_cumulative, growth_rate_percent)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q14, "Q14", "Growth de orders criadas por mês")
+```
+
+#### Q20 - Growth de usuários ativos gerando orders por mês
+
+*Objetivo*: Calcular, mês a mês, o total de usuários únicos qeu realizaram pelo menos uma order e determinar a variçaõ percentual em relação ao mês anterior, possibilitando monitorar o engajamento dos usuários com a funcionalidade de criação ao longo do tempo.
+
+*Entrada*: `order`
+
+*Saída*: `table(month, new_users_count, prev_users_active, growth_rate_percent, avg, growth_rate_percent, max_growth_rate_percent, max_growth_period)`
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+show_sql(Q14, "Q14", "Growth de usuários ativos gerando orders  por mês")
+```
 
 ### Anexo B - Reprodutibilidade
