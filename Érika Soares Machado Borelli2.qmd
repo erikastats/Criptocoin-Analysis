@@ -1,0 +1,210 @@
+---
+title: "Análise de crescimento de operações e produtos BIPA"
+author: "Érika Soares Machado Borelli"
+format: pdf
+editor: visual
+---
+
+## Introdução
+
+O objetivo deste desafio é avaliar como as operações e produtos da Bipa contribuem para o crescimento da empresa, utilizando dados simulados que representam operações reais da plataforma. Para isso, será proposta uma métrica que reflita de forma consistente esse crescimento e que gere insights acionáveis para orientar decisões estratégicas.
+
+Esse tipo de análise é fundamental para medir o sucesso da plataforma, identificar oportunidades de monetização e garantir um crescimento sustentável.
+
+Após uma etapa de exploração e entendimento dos dados , com atenção à consistência das informações e à jornada dos usuários, definiu-se como métrica principal o **Growth Rate de utilização dos produtos e operações**. Essa métrica mede a taxa de crescimento do número de usuários ativos que realizam transações nos diferentes produtos internos da Bipa, permitindo avaliar tanto a **ampliação da base engajada** quanto o **aumento da profundidade de uso** ao longo do tempo.
+
+## Métrica principal - Growth Rate de Base Engajada
+
+Para este desafio usaremos a Growth Rate, ou Taxa de Crescimento. Ela é um indicador percentual que mede o aumento de um valor ao longo do tempo.
+
+$$ \text{Growth Rate} = \frac{U_{\text{Período Atual}} - U_{\text{Período Anterior}}}{U_{\text{Período Anterior}}} \times 100 $$
+
+Onde:
+
+-   $U_{Período}$ = número de usuários ativos no período, considerando apenas aqueles que realizaram pelo menos uma das seguintes ações:
+
+    -   Criar um cartão;
+
+    -   Realizar uam compra com cartão;
+
+    -   Enviar ou receber uam transferência interna;
+
+    -   Criar um *quote* ou executar um *order*;
+
+    -   Realizar um PIX.
+
+**Critérios de cálculo:**
+
+1.  A métrica será calculada em frequência mensal e anual (quando possível).
+2.  Serão considerados apenas meses com registros efetivos de atividade para evitar distorções.
+3.  Usuários serão considerados inativos a partir da data de sua última ação registrada e não entrarão nos períodos subsequentes.
+
+Essa definição garante que a taxa de crescimento reflita variações reais na base engajada, e naõ apenas oscilações na base total de caastros ou períodos sem dados relevantes.
+
+## Resultados
+
+```{r bibliotecas}
+#| include: true
+#| message: false
+#| error: false
+
+# Bibliotecas
+library(gt)
+library(ggplot2)
+library(hrbrthemes)
+library(tidyr)
+library(scales)
+
+# Importando banco de dados
+source("ccreating_db.R")
+
+# Importando funções
+source("funcoes_ciptocoin_analysis.R")
+```
+
+#### 1. Growth Rate geral da base engajada (mensal)
+
+```{r Q1}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+Q1 = "
+-- 1. Contagem de novos usuários por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_users_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM users
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de novos usuários
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+),
+
+-- 4. Criação da tabela com as últimas atividades dos usuários inativos
+dt_union AS (
+  SELECT
+    u.id,
+    u.created_at,
+    q.created_at AS quote_created_at,
+    ch.created_at AS card_created_at,
+    ch.updated_at AS card_updated_at,
+    pix.created_at AS pix_created_at,
+    o.created_at AS order_created_at,
+    cp.created_at AS card_pu_created_at,
+    cp.updated_at AS card_pu_updated_at
+  FROM users u
+  LEFT JOIN quotes q ON u.id = q.user_id
+  LEFT JOIN card_holder ch ON u.id = ch.user_id
+  LEFT JOIN pix_transactions pix ON u.id = pix.user_id
+  LEFT JOIN orders o ON u.id = o.user_id
+  LEFT JOIN card_purchases cp ON u.id = cp.user_id
+  WHERE u.active = 0
+),
+
+-- 5. Reorganizando os timestamps em formato 'long'
+dt_union_pivot AS (
+  SELECT id, 'quote_created_at' AS nome_coluna, quote_created_at AS valor FROM dt_union
+  UNION ALL
+  SELECT id, 'card_created_at', card_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_updated_at', card_updated_at FROM dt_union
+  UNION ALL
+  SELECT id, 'pix_created_at', pix_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'order_created_at', order_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_created_at', card_pu_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_updated_at', card_pu_updated_at FROM dt_union
+),
+
+-- 6. Ordenando para pegar a última atividade de cada usuário inativo
+ordenado AS (
+  SELECT DISTINCT 
+    id,
+    nome_coluna,
+    datetime(valor, 'unixepoch') AS date,
+    ROW_NUMBER() OVER (PARTITION BY id ORDER BY datetime(valor, 'unixepoch') DESC) AS rn
+  FROM dt_union_pivot
+  WHERE valor IS NOT NULL
+),
+
+-- 7. Mantendo apenas a última atividade registrada
+last_actions AS (
+  SELECT * FROM ordenado WHERE rn = 1
+),
+
+-- 8. Contando os usuários inativos por mês de sua última ação
+inativos_mes AS (
+  SELECT 
+    strftime('%Y-%m', datetime(date)) AS month,
+    COUNT(DISTINCT id) AS users_deactive
+  FROM last_actions
+  GROUP BY month
+)
+
+-- 9. Cálculo final da taxa de crescimento com ajuste por usuários inativos
+SELECT 
+  wg.month,
+  wg.new_users_count,
+  wg.cumulative_users,
+  wg.prev_cumulative,
+  CASE 
+    WHEN wg.prev_cumulative IS NULL OR wg.prev_cumulative = 0 THEN NULL
+    ELSE ROUND((wg.cumulative_users - wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 1.0 / 
+                (wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth wg
+LEFT JOIN inativos_mes i ON wg.month = i.month
+ORDER BY wg.month;
+
+"
+
+cum_month <- query_data(Q1)
+growth_metric_plot(df = cum_month,
+                   xtitle = "Mês",
+                   plottitle = "Crescimento mensal de usuários BIPA",
+                   xcolname = "month",
+                   caption_text = "Fonte: Query Q1 — cálculo de novos usuários e growth")
+
+```
+
+```{r}
+Q1
+```
+
+## Recomendações
+
+## Limitações e próximos passos
+
+## Anexos
+
+### Anexo A - SQL completo (com índice)
+
+#### Q1 - Unificação de transações
+
+*Objetivo*: padronizar todas as operações em um só conjunto para cálculo de KPIs
+
+*Entrada*: `orders` , `card_purchases`, `pix_transactions`, `internal_transfers`
+
+*Saída*: ...
+
+### Anexo B - Reprodutibilidade

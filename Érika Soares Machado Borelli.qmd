@@ -7,31 +7,41 @@ editor: visual
 
 ## Introdução
 
-O objetivo deste desafio é entender como as operações e produtos da BIPA estão contribuindo para o crescimento da empresa com base em dados simulados de operações reais. Para isso será proposta uma métrica que reflita este crescimento e que traga insights que serão usados para orientar decisões estratégicas. Este tipo de análise é essencial para medir o sucesso da plataforma, identificar oportunidades de monetização e garantir um crescimento sustentável.
+O objetivo deste desafio é avaliar como as operações e produtos da Bipa contribuem para o crescimento da empresa, utilizando dados simulados que representam operações reais da plataforma. Para isso, será proposta uma métrica que reflita de forma consistente esse crescimento e que gere insights acionáveis para orientar decisões estratégicas.
 
-Para definir uma métrica significativa da relação entre as operações e produtos com o crescimento da emrpesa, inicialmente foram realizadas etapas exploratórias e de entendimento dos dados, com atenção especial à consistência das informações e à jornada dos usuários na plataforma. Com isso, a métrica proposta foi um Growth Rate baseada na utilização dos produtos e operações pelos usuários.
+Esse tipo de análise é fundamental para medir o sucesso da plataforma, identificar oportunidades de monetização e garantir um crescimento sustentável.
 
-## Métrica principal
+Após uma etapa de exploração e entendimento dos dados , com atenção à consistência das informações e à jornada dos usuários, definiu-se como métrica principal o **Growth Rate de utilização dos produtos e operações**. Essa métrica mede a taxa de crescimento do número de usuários ativos que realizam transações nos diferentes produtos internos da Bipa, permitindo avaliar tanto a **ampliação da base engajada** quanto o **aumento da profundidade de uso** ao longo do tempo.
+
+## Métrica principal - Growth Rate de Base Engajada
 
 Para este desafio usaremos a Growth Rate, ou Taxa de Crescimento. Ela é um indicador percentual que mede o aumento de um valor ao longo do tempo.
 
 $$
-\text{Growth Rate} = \frac{V_{\text{Usuários Atuais}} - V_{\text{Usuários do Período Anterior}}}{V_{\text{Usuários do Período Anterior}}} \times 100
+\text{Growth Rate} = \frac{U_{\text{Período Atual}} - U_{\text{Período Anterior}}}{U_{\text{Período Anterior}}} \times 100
 $$
 
-Normalmente é calculada em diferente períodos (mensal, trimestral, anual) e é fundamental para analisar tendências e fazer projeções. A usaremos como taxa mensal e anual, porém como a base de dados fornecida é uma amostra simulada e não contém um histórico contínuo ou completo dos usuários ao longo do tempo, optei por considerar apenas os meses com registros efetivos dos usuários para o cálculo da taxa de crescimento. Essa abordagem evita distorções nos resutlados e foca nos momentos em que houve de fato atividade relevante na plataforma.
+Onde:
 
-Outra informação importante será a retirada os usuários inativos após a data da sua última ação na plataforma, pois não há explicitamente quando os usuários ficaram inativos. O que será considerado "ação" neste caso é:
+-   $U_{Período}$ = número de usuários ativos no período, considerando apenas aqueles que realizaram pelo menos uma das seguintes ações:
 
--   Criar um cartão
+    -   Criar um cartão;
 
--   Fazer uma compra com cartão
+    -   Realizar uam compra com cartão;
 
--   Fazer ou receber uma transferência interna
+    -   Enviar ou receber uam transferência interna;
 
--   Criar um quote ou order
+    -   Criar um *quote* ou executar um *order*;
 
--   Fazer um pix
+    -   Realizar um PIX.
+
+**Critérios de cálculo:**
+
+1.  A métrica será calculada em frequência mensal e anual (quando possível).
+2.  Serão considerados apenas meses com registros efetivos de atividade para evitar distorções.
+3.  Usuários serão considerados inativos a partir da data de sua última ação registrada e não entrarão nos períodos subsequentes.
+
+Essa definição garante que a taxa de crescimento reflita variações reais na base engajada, e naõ apenas oscilações na base total de caastros ou períodos sem dados relevantes.
 
 ## Análise
 
@@ -162,13 +172,13 @@ ggplot(df, aes(x = date)) +
 
 A análise foi realizada considerando a base de clientes como um todo, bem como segmentações por cada produto e operação.
 
-#### Crescimento periódico de usuários BIPA
+#### Crescimento periódico de usuários BIPA por cadastro
 
 Analisando os usuários mensalmente, por meses que teve entrada de novos usuários identificou-se o seguinte resultado:
 
 ```{r}
 query = "
--- Contagem de usuários únicos criados por mês/Ano
+-- 1. Contagem de novos usuários por mês
 WITH month_user AS (
   SELECT 
     COUNT(DISTINCT id) AS new_users_count,
@@ -177,7 +187,7 @@ WITH month_user AS (
   GROUP BY month
 ),
 
--- Com o resultado de month_user, acrescentar o valor acumulativo de total de novos usuários por mês/Ano
+-- 2. Cálculo acumulado de novos usuários
 with_cumulative AS (
   SELECT 
     month,
@@ -186,7 +196,271 @@ with_cumulative AS (
   FROM month_user
 ),
 
--- 
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+),
+
+-- 4. Criação da tabela com as últimas atividades dos usuários inativos
+dt_union AS (
+  SELECT
+    u.id,
+    u.created_at,
+    q.created_at AS quote_created_at,
+    ch.created_at AS card_created_at,
+    ch.updated_at AS card_updated_at,
+    pix.created_at AS pix_created_at,
+    o.created_at AS order_created_at,
+    cp.created_at AS card_pu_created_at,
+    cp.updated_at AS card_pu_updated_at
+  FROM users u
+  LEFT JOIN quotes q ON u.id = q.user_id
+  LEFT JOIN card_holder ch ON u.id = ch.user_id
+  LEFT JOIN pix_transactions pix ON u.id = pix.user_id
+  LEFT JOIN orders o ON u.id = o.user_id
+  LEFT JOIN card_purchases cp ON u.id = cp.user_id
+  WHERE u.active = 0
+),
+
+-- 5. Reorganizando os timestamps em formato 'long'
+dt_union_pivot AS (
+  SELECT id, 'quote_created_at' AS nome_coluna, quote_created_at AS valor FROM dt_union
+  UNION ALL
+  SELECT id, 'card_created_at', card_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_updated_at', card_updated_at FROM dt_union
+  UNION ALL
+  SELECT id, 'pix_created_at', pix_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'order_created_at', order_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_created_at', card_pu_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_updated_at', card_pu_updated_at FROM dt_union
+),
+
+-- 6. Ordenando para pegar a última atividade de cada usuário inativo
+ordenado AS (
+  SELECT DISTINCT 
+    id,
+    nome_coluna,
+    datetime(valor, 'unixepoch') AS date,
+    ROW_NUMBER() OVER (PARTITION BY id ORDER BY datetime(valor, 'unixepoch') DESC) AS rn
+  FROM dt_union_pivot
+  WHERE valor IS NOT NULL
+),
+
+-- 7. Mantendo apenas a última atividade registrada
+last_actions AS (
+  SELECT * FROM ordenado WHERE rn = 1
+),
+
+-- 8. Contando os usuários inativos por mês de sua última ação
+inativos_mes AS (
+  SELECT 
+    strftime('%Y-%m', datetime(date)) AS month,
+    COUNT(DISTINCT id) AS users_deactive
+  FROM last_actions
+  GROUP BY month
+)
+
+-- 9. Cálculo final da taxa de crescimento com ajuste por usuários inativos
+SELECT 
+  wg.month,
+  wg.new_users_count,
+  wg.cumulative_users,
+  wg.prev_cumulative,
+  CASE 
+    WHEN wg.prev_cumulative IS NULL OR wg.prev_cumulative = 0 THEN NULL
+    ELSE ROUND((wg.cumulative_users - wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 1.0 / 
+                (wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth wg
+LEFT JOIN inativos_mes i ON wg.month = i.month
+ORDER BY wg.month;
+
+"
+
+
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_month <- query_data(query)
+growth_metric_plot(cum_month, "Mês","Crescimento mensal de usuários BIPA", 'month' )
+
+```
+
+O gráfico mostra que, ao longo do tempo, a quantidade absoluta de novos usuários se manteve relativamente constante, com exceção de novembro de 2024, quando houve um pico no número de cadastros. No entanto, como a base de usuários acumulada cresce a cada período, a taxa percentual de crescimento tende a diminuir. Isso é esperado em bases com crescimento linear, mas acumulativo. Mesmo com novos usuários entrando, o impacto relativo em relação ao total é cada vez menor.
+
+Analisando os usuários anualmente, por anos que houveram entrada de novos usuários identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de novos usuários por ano
+WITH year_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_users_count,
+    strftime('%Y', datetime(created_at, 'unixepoch')) AS year
+  FROM users
+  GROUP BY year
+),
+
+-- 2. Cálculo acumulado de novos usuários
+with_cumulative AS (
+  SELECT 
+    year,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY year) AS cumulative_users
+  FROM year_user
+),
+
+-- 3. Cálculo da base acumulada do ano anterior
+with_growth AS (
+  SELECT
+    year,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY year) AS prev_cumulative
+  FROM with_cumulative
+),
+
+-- 4. Criação da tabela com as últimas atividades dos usuários inativos
+dt_union AS (
+  SELECT
+    u.id,
+    u.created_at,
+    q.created_at AS quote_created_at,
+    ch.created_at AS card_created_at,
+    ch.updated_at AS card_updated_at,
+    pix.created_at AS pix_created_at,
+    o.created_at AS order_created_at,
+    cp.created_at AS card_pu_created_at,
+    cp.updated_at AS card_pu_updated_at
+  FROM users u
+  LEFT JOIN quotes q ON u.id = q.user_id
+  LEFT JOIN card_holder ch ON u.id = ch.user_id
+  LEFT JOIN pix_transactions pix ON u.id = pix.user_id
+  LEFT JOIN orders o ON u.id = o.user_id
+  LEFT JOIN card_purchases cp ON u.id = cp.user_id
+  WHERE u.active = 0
+),
+
+-- 5. Reorganizando os timestamps em formato 'long'
+dt_union_pivot AS (
+  SELECT id, 'quote_created_at' AS nome_coluna, quote_created_at AS valor FROM dt_union
+  UNION ALL
+  SELECT id, 'card_created_at', card_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_updated_at', card_updated_at FROM dt_union
+  UNION ALL
+  SELECT id, 'pix_created_at', pix_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'order_created_at', order_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_created_at', card_pu_created_at FROM dt_union
+  UNION ALL
+  SELECT id, 'card_pu_updated_at', card_pu_updated_at FROM dt_union
+),
+
+-- 6. Ordenando para pegar a última atividade de cada usuário inativo
+ordenado AS (
+  SELECT DISTINCT 
+    id,
+    nome_coluna,
+    datetime(valor, 'unixepoch') AS date,
+    ROW_NUMBER() OVER (PARTITION BY id ORDER BY datetime(valor, 'unixepoch') DESC) AS rn
+  FROM dt_union_pivot
+  WHERE valor IS NOT NULL
+),
+
+-- 7. Mantendo apenas a última atividade registrada
+last_actions AS (
+  SELECT * FROM ordenado WHERE rn = 1
+),
+
+-- 8. Contando os usuários inativos por ano de sua última ação
+inativos_ano AS (
+  SELECT 
+    strftime('%Y', datetime(date)) AS year,
+    COUNT(DISTINCT id) AS users_deactive
+  FROM last_actions
+  GROUP BY year
+)
+
+-- 9. Cálculo final da taxa de crescimento com ajuste por usuários inativos
+SELECT 
+  wg.year,
+  wg.new_users_count,
+  wg.cumulative_users,
+  wg.prev_cumulative,
+  CASE 
+    WHEN wg.prev_cumulative IS NULL OR wg.prev_cumulative = 0 THEN NULL
+    ELSE ROUND((wg.cumulative_users - wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 1.0 / 
+                (wg.prev_cumulative - COALESCE(i.users_deactive, 0)) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth wg
+LEFT JOIN inativos_ano i ON wg.year = i.year
+ORDER BY wg.year;
+
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_year <- query_data(query)
+growth_metric_plot(cum_year, "Ano","Crescimento Anual de usuários BIPA", 'year' )
+```
+
+A análise anual reforça a tendência de queda na taxa de crescimento da base de usuários da BIPA. Apesar de o número absoluto de novos usuários ter se mantido estável em 2024 e 2025, o crescimento líquido em 2025 foi nulo, devido à inativação de dois usuários, o mesmo número de novos cadastros registrados no ano.
+
+Essa desaceleração constante nas taxas de crescimento, apesar do número relativo absoluto de novos usuários se matner relativament estável, sugere que a base total está crescendo lentamente ou até se estagnando. O que indica uma possível saturação do público-alvo, redução de aquisição de novos clientes ou desafios em estratégias de retenção e atração.
+
+#### Crescimento periódico na obtenção de cartão BIPA
+
+Analisando os usuários mensalmente, por meses que houveram a obtenção de cartões por usuários que não o possuiam no período anterior, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter o primeiro pedido de cartão de cada usuário
+WITH first_card_per_user AS (
+  SELECT 
+    user_id,
+    MIN(datetime(created_at, 'unixepoch')) AS first_card_date
+  FROM card_holder
+  GROUP BY user_id
+),
+
+-- 2. Agrupar esses primeiros pedidos por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_card_date) AS month
+  FROM first_card_per_user
+  GROUP BY month
+),
+
+-- 3. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 4. Base acumulada do mês anterior
 with_growth AS (
   SELECT
     month,
@@ -196,6 +470,7 @@ with_growth AS (
   FROM with_cumulative
 )
 
+-- 5. Cálculo final da taxa de crescimento
 SELECT 
   month,
   new_users_count,
@@ -203,18 +478,765 @@ SELECT
   prev_cumulative,
   CASE 
     WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
-    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / prev_cumulative * 100, 2)
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
   END AS growth_rate_percent
 FROM with_growth
 ORDER BY month;
 
+
 "
-
-
 ```
 
 ```{r}
-cum_month <- query_data(query)
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_month_card <- query_data(query)
+growth_metric_plot(cum_month_card, "Mês","Crescimento Mensal de solicitações de cartão BIPA", 'month' )
+```
+
+Analisando a quantidade de novos cartões que foram solicitados em relação ao período anterior, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de novos cartões por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS new_cards_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM card_holder
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de novos usuários
+with_cumulative AS (
+  SELECT 
+    month,
+    new_cards_count,
+    SUM(new_cards_count) OVER (ORDER BY month) AS cumulative_cards
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_cards_count,
+    cumulative_cards,
+    LAG(cumulative_cards) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  new_cards_count,
+  cumulative_cards,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_cards - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_month_card_id <-    rename(query_data(query),
+                              new_users_count = new_cards_count)
+
+growth_metric_plot(cum_month_card_id, "Mês","Crescimento Mensal de cartões novos BIPA", 'month' )
+```
+
+#### Crescimento períodico em compras por cartão BIPA
+
+Analisando a quantidade de compras efetuadas com cartão BIPA em relação ao período anterior por usuário novo de compras, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter o primeiro pedido de cartão de cada usuário
+WITH first_purchase_per_user AS (
+  SELECT 
+    user_id,
+    MIN(datetime(created_at, 'unixepoch')) AS first_purchase_date
+  FROM card_purchases
+  GROUP BY user_id
+),
+
+-- 2. Agrupar esses primeiros pedidos por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_purchase_date) AS month
+  FROM first_purchase_per_user
+  GROUP BY month
+),
+
+-- 3. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 4. Base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+-- 5. Cálculo final da taxa de crescimento
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_Purchase <-    query_data(query)
+
+growth_metric_plot(cum_Purchase, "Mês","Crescimento Mensal de compras em cartões BIPA por usuário", 'month' )
+```
+
+Analisando a quantidade de compras efetuadas com cartão BIPA em relação ao período anterior , identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de purchases por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS purchase_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM card_purchases
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de quantidade compras
+with_cumulative AS (
+  SELECT 
+    month,
+    purchase_count,
+    SUM(purchase_count) OVER (ORDER BY month) AS cumulative_purchase
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    purchase_count,
+    cumulative_purchase,
+    LAG(cumulative_purchase) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  purchase_count,
+  cumulative_purchase,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_purchase - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_Purchase_id <-    rename(query_data(query),
+                              new_users_count = purchase_count)
+
+growth_metric_plot(cum_Purchase_id, "Mês","Crescimento Mensal de compras em cartões BIPA", 'month' )
+```
+
+#### Crescimento períodico em transações PIX
+
+Analisando a quantidade de transações PIX em relação ao período anterior por usuário novo, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter a primeira transação Pix de cada usuário
+WITH first_PIX_per_user AS (
+  SELECT 
+    user_id,
+    MIN(datetime(created_at, 'unixepoch')) AS first_PIX_date
+  FROM pix_transactions
+  GROUP BY user_id
+),
+
+-- 2. Agrupar as primeiras transações por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_PIX_date) AS month
+  FROM first_PIX_per_user
+  GROUP BY month
+),
+
+-- 3. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 4. Base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+-- 5. Cálculo final da taxa de crescimento
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_Pix_user <-    query_data(query)
+
+growth_metric_plot(cum_Pix_user, "Mês","Crescimento Mensal de transações com PIX por usuário", 'month' )
+```
+
+Analisando a quantidade de transações PIX em relação ao período anterior, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de transações Pix por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS pix_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM pix_transactions
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de quantidade compras
+with_cumulative AS (
+  SELECT 
+    month,
+    pix_count,
+    SUM(pix_count) OVER (ORDER BY month) AS cumulative_pix
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    pix_count,
+    cumulative_pix,
+    LAG(cumulative_pix) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  pix_count,
+  cumulative_pix,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_pix - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_pix <-    rename(query_data(query),
+                              new_users_count = pix_count)
+
+growth_metric_plot(cum_pix, "Mês","Crescimento Mensal de operações PIX", 'month' )
+```
+
+#### Crescimento períodico em transações internas BIPA
+
+Analisando a quantidade de transações internas em relação ao período anterior por usuário novo, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter a primeira transação interna de cada usuário como sender
+WITH first_sender_date AS (
+  SELECT 
+    sender_user_id as user_id,
+    'sender' as tipo_trans,
+    MIN(datetime(created_at, 'unixepoch')) AS first_transaction_date
+  FROM internal_transfers
+  GROUP BY sender_user_id
+),
+
+-- 2. Obter a primeira transação interna de cada usuário como receiver
+first_receiver_date AS (
+  SELECT 
+    receiver_user_id as user_id,
+    'receiver' as tipo_trans,
+    MIN(datetime(created_at, 'unixepoch')) AS first_transaction_date
+  FROM internal_transfers
+  GROUP BY receiver_user_id
+),
+
+-- 3. Concatenar informações de receiver e sender
+first_user_trans_date_join AS (
+  SELECT * FROM first_sender_date
+  UNION ALL
+  SELECT * FROM first_receiver_date
+),
+
+-- 4. Rankeando transações de cada usuário, independente do tipo
+ranked_trans AS (
+  SELECT *,
+         ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY first_transaction_date) AS rn
+  FROM first_user_trans_date_join
+),
+
+-- 5. Selecionando primeira transação de cada usuário
+first_trans AS (
+SELECT * 
+FROM ranked_trans
+where rn = 1
+),
+
+-- 6. Agrupar as primeiras transações por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_transaction_date) AS month
+  FROM first_trans
+  GROUP BY month
+),
+
+-- 7. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 8. Base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+-- 9. Cálculo final da taxa de crescimento
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_transaction_user <-    query_data(query)
+
+growth_metric_plot(cum_transaction_user, "Mês","Crescimento Mensal de transações internas por usuário", 'month' )
+```
+
+Analisando a quantidade de transações internas em relação ao período anterior, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de transações internas por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS ti_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM internal_transfers
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de quantidade de transações internas
+with_cumulative AS (
+  SELECT 
+    month,
+    ti_count,
+    SUM(ti_count) OVER (ORDER BY month) AS cumulative_ti
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    ti_count,
+    cumulative_ti,
+    LAG(cumulative_ti) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  ti_count,
+  cumulative_ti,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_ti - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_transaction <-    rename(query_data(query),
+                              new_users_count = ti_count)
+
+growth_metric_plot(cum_transaction, "Mês","Crescimento Mensal de transações internas", 'month' )
+```
+
+#### Crescimento periódico em quotes
+
+Analisando a quantidade de quotes geradas em relação ao período anterior por novo usuário, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter a primeira quote de cada usuário
+WITH first_quote_per_user AS (
+  SELECT 
+    user_id,
+    MIN(datetime(created_at, 'unixepoch')) AS first_quote_date
+  FROM quotes
+  GROUP BY user_id
+),
+
+-- 2. Agrupar as primeiras quotes por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_quote_date) AS month
+  FROM first_quote_per_user
+  GROUP BY month
+),
+
+-- 3. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 4. Base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+-- 5. Cálculo final da taxa de crescimento
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_quotes_user <-    query_data(query)
+
+growth_metric_plot(cum_quotes_user, "Mês","Crescimento Mensal de quotes criadas por usuário", 'month' )
+```
+
+Analisando a quantidade de quotes geradas em relação ao período anterior por novos usuários, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de quotes por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS quotes_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM quotes
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de quantidade de transações internas
+with_cumulative AS (
+  SELECT 
+    month,
+    quotes_count,
+    SUM(quotes_count) OVER (ORDER BY month) AS cumulative_quotes
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    quotes_count,
+    cumulative_quotes,
+    LAG(cumulative_quotes) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  quotes_count,
+  cumulative_quotes,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_quotes - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_quotes <-    rename(query_data(query),
+                              new_users_count = quotes_count)
+
+growth_metric_plot(cum_quotes, "Mês","Crescimento Mensal de quotes", 'month' )
+```
+
+#### Crescimento periódico em orders
+
+Analisando a quantidade de orders geradas em relação ao período anterior por novo usuário, identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Obter a primeira order de cada usuário
+WITH first_order_per_user AS (
+  SELECT 
+    user_id,
+    MIN(datetime(created_at, 'unixepoch')) AS first_order_date
+  FROM orders
+  GROUP BY user_id
+),
+
+-- 2. Agrupar as primeiras quotes por mês
+month_user AS (
+  SELECT 
+    COUNT(*) AS new_users_count,
+    strftime('%Y-%m', first_order_date) AS month
+  FROM first_order_per_user
+  GROUP BY month
+),
+
+-- 3. Cálculo acumulado
+with_cumulative AS (
+  SELECT 
+    month,
+    new_users_count,
+    SUM(new_users_count) OVER (ORDER BY month) AS cumulative_users
+  FROM month_user
+),
+
+-- 4. Base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    new_users_count,
+    cumulative_users,
+    LAG(cumulative_users) OVER (ORDER BY month) AS prev_cumulative
+  FROM with_cumulative
+)
+
+-- 5. Cálculo final da taxa de crescimento
+SELECT 
+  month,
+  new_users_count,
+  cumulative_users,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_users - prev_cumulative) * 1.0 / 
+                prev_cumulative * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth
+ORDER BY month;"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_orders_user <-    query_data(query)
+
+growth_metric_plot(cum_orders_user, "Mês","Crescimento Mensal de orders criadas por usuário", 'month' )
+```
+
+Analisando a quantidade de orders geradas em relação ao período anterior , identificou-se o seguinte resultado:
+
+```{r}
+query = "
+-- 1. Contagem de order por mês
+WITH month_user AS (
+  SELECT 
+    COUNT(DISTINCT id) AS order_count,
+    strftime('%Y-%m', datetime(created_at, 'unixepoch')) AS month
+  FROM orders
+  GROUP BY month
+),
+
+-- 2. Cálculo acumulado de quantidade de orders
+with_cumulative AS (
+  SELECT 
+    month,
+    order_count,
+    SUM(order_count) OVER (ORDER BY month) AS cumulative_order
+  FROM month_user
+),
+
+-- 3. Cálculo da base acumulada do mês anterior
+with_growth AS (
+  SELECT
+    month,
+    order_count,
+    cumulative_order,
+    LAG(cumulative_order) OVER (ORDER BY month ) AS prev_cumulative
+  FROM with_cumulative
+)
+
+
+-- 4. Cálculo final da taxa de crescimento de usuários requerindo cartão
+SELECT 
+  month,
+  order_count,
+  cumulative_order,
+  prev_cumulative,
+  CASE 
+    WHEN prev_cumulative IS NULL OR prev_cumulative = 0 THEN NULL
+    ELSE ROUND((cumulative_order - prev_cumulative) * 1.0 / 
+                (prev_cumulative) * 100, 2)
+  END AS growth_rate_percent
+FROM with_growth 
+ORDER BY month;
+"
+```
+
+```{r}
+#| message: false
+#| error: false
+#| echo: false
+#| warning: false 
+cum_order <-    rename(query_data(query),
+                              new_users_count = order_count)
+
+growth_metric_plot(cum_order, "Mês","Crescimento Mensal de order", 'month' )
+```
+
+#### Crescimento por diferenciação entre produtos e operações
+
+```{r}
+
 ```
 
 ## Conclusão
