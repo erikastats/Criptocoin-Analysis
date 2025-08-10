@@ -650,7 +650,7 @@ ORDER BY gr.{period};"
 
 # Gráfico facetado --------------------------------------------------------
 
-facet_plot <- function(df, colcount, xtitle, captioncontent, plottile){
+facet_plot <- function(df, colcount, xtitle, caption_text, plottile){
   
   colid = which(names(df) == colcount)
   names(df)[colid] = "new_count"
@@ -691,7 +691,7 @@ ggplot(df, aes(x = month)) +
   labs(
     title   = plottile,
     x       = "Mês",
-    caption = captioncontent
+    caption = caption_text
   ) +
   coord_cartesian(clip = "off") +  # permite rótulos passarem um pouco do topo
   theme_minimal(base_size = 11) +
@@ -700,4 +700,27 @@ ggplot(df, aes(x = month)) +
     strip.text      = element_text(face = "bold"),
     plot.caption    = element_text(hjust = 0, size = 8)
   )
+}
+
+
+average_plot_gr <- function(df, plottile, caption_text ){
+  df_sum <- df |>
+    distinct(produto, avg_growth_rate_percent) |>
+    filter(!is.na(avg_growth_rate_percent)) |>
+    mutate(produto = reorder(produto, avg_growth_rate_percent))
+  
+  ggplot(df_sum, aes(x = avg_growth_rate_percent, y = produto)) +
+    geom_col(fill = "#4e66e7", alpha = 0.6) +
+    geom_text(aes(label = paste0(round(avg_growth_rate_percent, 1), "%")),
+              hjust = -0.1, size = 3) +
+    scale_x_continuous(labels = function(x) paste0(x, "%"),
+                       expand = expansion(mult = c(0, 0.1))) +
+    labs(
+      title   = plottile,
+      x       = "Média (%)",
+      y       = NULL,
+      caption = caption_text
+    ) +
+    coord_cartesian(clip = "off") +
+    theme_minimal(base_size = 11)
 }
