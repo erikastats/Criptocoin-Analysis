@@ -484,7 +484,6 @@ SELECT
 FROM with_growth
 ORDER BY month;
 
-
 "
 ```
 
@@ -1236,7 +1235,7 @@ growth_metric_plot(cum_order, "Mês","Crescimento Mensal de order", 'month' )
 #### Crescimento por diferenciação entre produtos e operações
 
 ```{r}
-
+table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)
 ```
 
 ## Conclusão

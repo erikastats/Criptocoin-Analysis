@@ -739,3 +739,29 @@ show_sql(Q22, "Q22", "Profundidade média de multi-uso por mês")
 ```
 
 ### Apêndice B - Reprodutibilidade
+
+Todos os códigos utilizados nesta análise estão disponíveis no repositório público:
+
+[GitHub - Case Técnico BIPA](https://github.com/erikastats/Criptocoin-Analysis)
+
+Abaixo, segue o mapeamento entre as etapas da análise que proporcionaram este relatório ser feito e os respectivos arquivos de código no repositório:
+
+| Etapa da Análise | Descrição | Localização no Repositório |
+|------------------|------------------------------------|------------------|
+| 1\. Exploração inicial dos dados | Carregamento, verificação de consistência e análise exploratória inicial | `EDA_BIPA_full.qmd` |
+| 2\. Criação do banco de dados | Código para criar o bando de dados SQLite | `ccreating_db.R` |
+| 3\. Funções utilizadas | Script para criação de funções de plots e queries | `funcoes_ciptocoin_analysis.R` |
+| 4\. Criação das queries | Criação das queries e tabelas resultantes | `build_tables.R` |
+| 5\. Conclusões e recomendações | Consolidação dos insights | `Érika Soares Machado Borelli2.qmd` |
+
+**Requisitos para execução:**
+
+-   Linguagem: SQL (SQLite), R (versão mínima 4.4.3) e Rstudio
+
+-   Pacotes R utilizados: `ggplot2`, `gt`, `hrbrthemes`, `dplyr`, `tidyr`, `scales`, `glue`, `DBI`, `RSQLite`, `readr`
+
+-   Passo a passo:
+
+    1.  Clonar o repositório.
+    2.  Executar o script #5 (ele já incorpora os outros).
+    3.  Comparar os resultados obtidos com os apresentados no relatório.
