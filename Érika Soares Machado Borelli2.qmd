@@ -3,7 +3,6 @@ title: "Análise de crescimento de operações e produtos BIPA"
 author: "Érika Soares Machado Borelli"
 format: 
   pdf:
-    out-width: "90%"
     fig-align: center
     include-in-header:
       text: |
@@ -34,9 +33,9 @@ Onde:
 
     -   Criar um cartão;
 
-    -   Realizar uam compra com cartão;
+    -   Realizar uma compra com cartão;
 
-    -   Enviar ou receber uam transferência interna;
+    -   Enviar ou receber uma transferência interna;
 
     -   Criar um *quote* ou executar um *order*;
 
@@ -48,7 +47,11 @@ Onde:
 2.  Serão considerados apenas meses com registros efetivos de atividade para evitar distorções.
 3.  Usuários serão considerados inativos a partir da data de sua última ação registrada e não entrarão nos períodos subsequentes.
 
-Essa definição garante que a taxa de crescimento reflita variações reais na base engajada, e naõ apenas oscilações na base total de caastros ou períodos sem dados relevantes.
+Essa definição garante que a taxa de crescimento reflita variações reais na base engajada, e não apenas oscilações na base total de cadastros ou períodos sem dados relevantes.
+
+**Uso no estudo:**
+
+No contexto desta análise, a Growth Rate será aplicada para medir o crescimento do número de usuários ativos por produto e multi-produto ao longo do tempo. Isso permite identificar tendências de adoção e engajamento, comparar períodos de maior ou menor expansão e avaliar efeito das operações e produtos da BIPA no aumento da base engajada. ALém disso, a métrica serve como proxy para potencial de crescimento finaneiro, dado que maior uso de produtos tende a gerar maior volume transacionado e receita.
 
 ## Resultados
 
@@ -65,6 +68,7 @@ library(hrbrthemes)
 library(dplyr)
 library(tidyr)
 library(scales)
+library(glue)
 
 # Importando banco de dados
 source("ccreating_db.R")
@@ -76,42 +80,42 @@ source("funcoes_ciptocoin_analysis.R")
 source("build_tables.R")
 ```
 
-#### 1. Growth Rate geral da base engajada (mensal)
+#### 1. Growth Rate geral da base engajada - Mensal
 
-```{r Q1}
+Mede a variação percentual mensal no número de usuários registrados na plataforma da Bipa. Considera todos os cadastros ativos em cada mês, permitindo acompanhar o crescimento ou retração da base de usuários ao longo do tempo. Essa métrica fornece uma visão geral do ritmo de expansão da plataforma, independentemente do nível de engajamento dos usuários.
+
+```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
-Q1 = query_growth_rate_geral( timeformat = "%Y-%m",
-                              colname = "month",
-                              title = "mês"
-                              )
+#| label: fig-gr-base-mensal
+#| fig-width: 9 
+#| fig-height: 5
 
-cum_month <- query_data(Q1)
 growth_metric_plot(df = cum_month,
                    xtitle = "Mês",
                    plottitle = "Crescimento mensal de usuários BIPA",
                    xcolname = "month",
-                   caption_text = "Fonte: Query Q1 (Apêndice A) - cálculo de novos usuários e growth mensal")
+                   caption_text = "Fonte: Query Q1 (Apêndice A) - cálculo de usuários acumulados e growth mensal")
 
 ```
 
-O gráfico mostra que, ao longo do tempo, a quantidade absoluta de novos usuários se manteve relativamente constante, com exceção de novembro de 2024, quando houve um pico no número de cadastros. No entanto, como a base de usuários acumulada cresce a cada período, a taxa percentual de crescimento tende a diminuir. Isso é esperado em bases com crescimento linear, mas acumulativo. Mesmo com novos usuários entrando, o impacto relativo em relação ao total é cada vez menor.
+O gráfico @fig-gr-base-mensal mostra a evolução acumulada da base de usuários da BIPA ao longo do tempo. Observa-se crescimento consistente, com destaque para o pico de novos cadastros em novembro de 2024. À medida que a base total aumenta, a taxa percentual de crescimento tende a cair — um comportamento esperado, já que cada novo grupo de usuários representa uma parcela proporcionalmente menor do total acumulado.
 
-#### 2. Growth Rate geral da base engajada (anual)
+#### 2. Growth Rate geral da base engajada - Anual
 
-```{r Q2}
+Mede a variação percentual anual no número de usuários registrados na plataforma da Bipa. Considera todos os cadastros ativos em cada ano, permitindo avaliar o crescimento ou retração da base de usuários em um horizonte de longo prazo. Essa métrica complementa a análise mensal ao evidenciar tendências mais amplas e reduzir o impacto de variações sazonais.
+
+```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
-Q2 = query_growth_rate_geral( timeformat = "%Y",
-                              colname = "year",
-                              title = "ano"
-                              )
+#| label: fig-gr-base-anual
+#| fig-width: 9 
+#| fig-height: 5
 
-cum_year <- query_data(Q2)
 growth_metric_plot(df = cum_year,
                    xtitle = "Ano",
                    plottitle = "Crescimento anual de usuários BIPA",
@@ -119,19 +123,20 @@ growth_metric_plot(df = cum_year,
                    caption_text = "Fonte: Query Q2 (Apêndice A) - cálculo de novos usuários e growth anual")
 ```
 
-A análise anual reforça a tendência de queda na taxa de crescimento da base de usuários da BIPA. Apesar de o número absoluto de novos usuários ter se mantido estável em 2024 e 2025, o crescimento líquido em 2025 foi nulo, devido à inativação de dois usuários, o mesmo número de novos cadastros registrados no ano.
+O gráfico \@fig-gr-base-anual mostra que, apesar de a base acumulada de usuários continuar crescendo, a taxa anual de crescimento vem caindo de forma constante. Em 2025, o crescimento líquido foi nulo, pois o número de novos cadastros foi exatamente compensado pela inativação de dois usuários. Esse padrão pode indicar saturação do público-alvo, desaceleração na aquisição de novos clientes ou desafios nas estratégias de retenção.
 
-Essa desaceleração constante nas taxas de crescimento, apesar do número relativo absoluto de novos usuários se matner relativament estável, sugere que a base total está crescendo lentamente ou até se estagnando. O que indica uma possível saturação do público-alvo, redução de aquisição de novos clientes ou desafios em estratégias de retenção e atração.
+#### 3. Engajamento por produto - Primeira adoção
 
-#### 3. Engajamento por produto - primeira adoção
-
-Mede o momento em que cada usuário usa o produto pela primeira vez
+Mede o número de usuários que utilizaram cada produto ou operação da Bipa pela primeira vez em um determinado mês. Permite identificar quais produtos estão atraindo novos usuários e em que períodos ocorre maior taxa de adoção inicial, fornecendo insumos para avaliar a eficácia de campanhas de aquisição e lançamentos de funcionalidades.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-eng-produto-primeira
+#| fig-width: 9 
+#| fig-height: 5
 
 
 adocao <- bind_rows(
@@ -141,49 +146,52 @@ adocao <- bind_rows(
   mutate(cum_transaction_user,  produto = "Transf. interna (Q12)"),
   mutate(cum_quotes_user,       produto = "Quote (Q15)"),
   mutate(cum_orders_user,       produto = "Order (Q18)")
-) |>
-  mutate(month = as.Date(paste0(month, "-01"))) |>
-  group_by(produto) |>
-  mutate(
-    max_bar = max(new_users_count, na.rm = TRUE),
-    max_gr  = max(growth_rate_percent, na.rm = TRUE),
-    scale   = ifelse(is.finite(max_bar/max_gr) & max_gr > 0, max_bar/max_gr, 1),
-    growth_scaled = growth_rate_percent * scale
-  ) |>
-  ungroup()
+) 
 
-facet_plot(adocao, 'new_users_count', "Novos usuários", "Fonte: Q3, Q6, Q9, Q12, Q15, Q18 (Apêndice A)", "Primeira adoção - Engajamento por produto ")
+facet_plot(adocao, 'cumulative_users', "Usuários acumulados", "Fonte: Q3, Q6, Q9, Q12, Q15, Q18 (Apêndice A)", "Primeira adoção - Engajamento por produto ")
 
 ```
 
-1.  **Picos iniciais seguidos de queda acentuada** - A maioria dos produtos apresentou crescimento na primeira adoção nos primeiros meses, mas houve forte retração subsequente, sugerindo que o lançamento ou campanhas iniciais atraíram mais usuários do que períodos posteriores.
+Esse conjunto de gráficos da @fig-eng-produto-primeira mostra o ritmo de adoção inicial de cada produto pelos usuários, com barras representando a base acumulada e a linha a taxa de crescimento.\
+Observa-se que:
 
-2.  **Produtos com baixa recorrência de adoção** - “Compra no cartão” e “Orders” mostram números absolutos baixos e pouco crescimento ao longo do tempo, indicando que poucos novos usuários aderem mensalmente a essas funcionalidades.
+-   **Cartão e PIX** tiveram crescimento rápido no início, mas desaceleração nos meses seguintes.
 
-3.  **Diferentes padrões de retenção pós-adoção** - O PIX e as transferências internas, apesar de quedas no growth rate, mantêm um número absoluto de novos usuários relativamente constante em alguns meses, sugerindo potencial de estabilização da adoção.
+-   **Compra no cartão** iniciou forte e manteve crescimento mais consistente que os demais.
+
+-   **Order e Quote** apresentaram picos de crescimento logo após o lançamento, seguidos de queda acentuada.
+
+-   **Transferência interna** teve a maior base acumulada, mas crescimento percentual cada vez menor.
+
+O padrão geral indica que, após um impulso inicial de adoção, a maioria dos produtos entra em fase de crescimento mais lento, o que pode refletir tanto a maturidade da base de clientes quanto a necessidade de novas estratégias de incentivo.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-eng-produto-primeira-media
+#| fig-width: 9 
+#| fig-height: 5
 
 average_plot_gr(adocao, "Média do Growth Rate - Primeira adoção (por produto)", "Fonte: Q3, Q6, Q9, Q12, Q15, Q18 (Apêndice A)")
 
 ```
 
-A média do Growth Rate oferece uma visão comparativa sobre o desempenho relativo de cada produto na atração de novos usuários ao longo do tempo. Apesar de ser influenciada por picos iniciais, comuns na primeira adoção, quando o crescimento tende a ser mais acentuado, a métrica ainda é útil para identificar quais produtos funcionam como principais portas de entrada para a base de clientes. Produtos com maior média de crescimento, como Cartão e Quote, indicam forte potencial de aquisição inicial, podendo ser priorizados em estratégias de marketing e campanhas de ativação. Já produtos com médias mais baixas, como Transferência interna, podem demandar ações específicas para aumentar sua atratividade e ampliar sua contribuição no crescimento da empresa.
+A média do Growth Rate, vista no gráfico @fig-eng-produto-primeira-media, oferece uma visão comparativa sobre o desempenho relativo de cada produto na atração de novos usuários ao longo do tempo. Apesar de ser influenciada por picos iniciais, comuns na primeira adoção, quando o crescimento tende a ser mais acentuado, a métrica ainda é útil para identificar quais produtos funcionam como principais portas de entrada para a base de clientes. Produtos com maior média de crescimento, como Cartão e Quote, indicam forte potencial de aquisição inicial, podendo ser priorizados em estratégias de marketing e campanhas de ativação. Já produtos com médias mais baixas, como Transferência interna, podem demandar ações específicas para aumentar sua atratividade e ampliar sua contribuição no crescimento da empresa.
 
-#### 4. Engajamento por novos eventos
+#### 4. Engajamento por produto - Novos eventos
 
-Mede o volume de novos registros/ações (cartões emitidos, compras realizadas, etc). Pode incluir ações repetidas de um mesmo usuário.
+Mede o volume total de novos registros ou ações realizadas em cada produto ou operação da Bipa (como cartões emitidos, compras realizadas, transferências, PIX, entre outros) em um determinado período. Pode incluir múltiplas ações de um mesmo usuário, permitindo avaliar a intensidade de uso e a geração de atividade na plataforma.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
-#| 
+#| label: fig-eng-produto-novos
+#| fig-width: 9 
+#| fig-height: 5
 # Vetor com os nomes dos dataframes
 df_names <- c(
   "cum_month_card_id", 
@@ -225,6 +233,8 @@ novos_eventos <- bind_rows(
 facet_plot(novos_eventos, 'new_ones_count', "Novos eventos", "Fonte: Q4, Q7, Q10, Q13, Q16, Q19 (Apêndice A)", "Novos eventos - Engajamento por produto")
 ```
 
+Do gráfico @fig-eng-produto-novos, temos:
+
 1.  **Crescimento inicial elevado e depois desaceleração** -Todos os produtos apresentam *growth rate* muito alto no primeiro período (até 200%), caindo rapidamente nos meses seguintes, sinalizando estabilização natural conforme a base cresce.
 
 2.  **Maior engajamento em alguns produtos** - *Quote (Q16)* e *PIX (Q10)* se destacam pelo maior volume absoluto de novos eventos, mantendo participação relevante mesmo com queda percentual.
@@ -236,23 +246,29 @@ facet_plot(novos_eventos, 'new_ones_count', "Novos eventos", "Fonte: Q4, Q7, Q10
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-eng-produto-novos-media
+#| fig-width: 9 
+#| fig-height: 3
 
 average_plot_gr(novos_eventos, "Média do Growth Rate - Novos Eventos",  "Fonte: Q4, Q7, Q10, Q13, Q16, Q19 (Apêndice A)")
 ```
 
-A média do *growth rate* de novos eventos revela que **Cartão (Q4)** e **PIX (Q10)** são os produtos com maior ritmo médio de crescimento (86,1% e 80%, respectivamente), indicando forte capacidade de atrair engajamento adicional ao longo do tempo. **Quote (Q16)** também apresenta desempenho sólido, com 67,4%, enquanto produtos como **Order (Q19)**, **Transferência interna (Q13)** e **Compra no cartão (Q7)** registram médias inferiores a 55%, sugerindo que, embora possam ter tido picos iniciais relevantes, mantêm um ritmo de expansão mais moderado. Esses resultados podem apoiar decisões estratégicas para reforçar o crescimento nos produtos de menor média, seja por meio de melhorias funcionais, campanhas de incentivo ou integração com produtos de maior desempenho.
+A média do *growth rate*, vista no gráfico @fig-eng-produto-novos-media, de novos eventos revela que **Cartão (Q4)** e **PIX (Q10)** são os produtos com maior ritmo médio de crescimento (86,1% e 80%, respectivamente), indicando forte capacidade de atrair engajamento adicional ao longo do tempo. **Quote (Q16)** também apresenta desempenho sólido, com 67,4%, enquanto produtos como **Order (Q19)**, **Transferência interna (Q13)** e **Compra no cartão (Q7)** registram médias inferiores a 55%, sugerindo que, embora possam ter tido picos iniciais relevantes, mantêm um ritmo de expansão mais moderado. Esses resultados podem apoiar decisões estratégicas para reforçar o crescimento nos produtos de menor média, seja por meio de melhorias funcionais, campanhas de incentivo ou integração com produtos de maior desempenho.
 
 É importante ressaltar que, como esta análise considera um período curto e um número limitado de observações, a média do *growth rate* pode ser fortemente influenciada por valores iniciais elevados, comuns no momento de lançamento ou primeira adoção, e não refletir de forma consistente a tendência de crescimento no longo prazo.
 
-#### 5. Engajamento por produto
+#### 5. Engajamento por produto - Total
 
-Mede quantos usuários únicos usaram o produto no mês, independente de ser a primeira vez ou não
+Mede o número de usuários únicos que utilizaram cada produto ou operação da Bipa em um determinado mês, independentemente de ser a primeira vez ou um uso recorrente. Essa métrica permite avaliar o alcance de cada produto na base ativa, identificando aqueles com maior penetração e potencial de retenção.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-eng-produto-total
+#| fig-width: 9 
+#| fig-height: 5
 produtos_join <- bind_rows(
   mutate(mau_card_gr,        produto = "Cartão (Q5)"),
   mutate(mau_purchase_gr,          produto = "Compra no cartão (Q8)"),
@@ -274,6 +290,8 @@ produtos_join <- bind_rows(
 facet_plot(produtos_join, 'new_users_count', "Total eventos", "Fonte: Q5, Q8, Q11, Q14, Q17, Q20 (Apêndice A)", "Engajamento total - Por produto")
 ```
 
+Pelo gráfico @fig-eng-produto-total, vemos:
+
 1.  **Estabilidade vs. variação brusca** - Produtos como *Order (Q20)* apresentaram estabilidade total, sem crescimento ao longo do período, enquanto outros, como *Quote (Q17)* e *PIX (Q11)*, tiveram oscilações expressivas, incluindo picos de 300% e quedas acima de 50%, indicando comportamento mais volátil dos usuários.
 
 2.  **Quedas acentuadas no engajamento** - *Compra no cartão (Q8)* e *Quote (Q17)* tiveram quedas negativas significativas no *growth rate* (-66,7%), sugerindo períodos com retração relevante no uso, possivelmente por mudanças no produto, sazonalidade ou substituição por outros meios.
@@ -285,23 +303,29 @@ facet_plot(produtos_join, 'new_users_count', "Total eventos", "Fonte: Q5, Q8, Q1
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-eng-produto-total-media
+#| fig-width: 9 
+#| fig-height: 3
 
 average_plot_gr(produtos_join, "Média do Growth Rate - Engajamento total",  "Fonte: Q5, Q8, Q11, Q14, Q17, Q20 (Apêndice A)")
 ```
 
-O gráfico mostra que, no engajamento total, **Quote (Q17)** e **PIX (Q11)** se destacam com as maiores médias de *growth rate*, 63,9% e 37,5% respectivamente, indicando crescimento consistente ao longo do período analisado. **Cartão (Q5)** também apresentou crescimento, mas em menor intensidade (16,7%), enquanto **Order (Q20)** permaneceu estável, sem variação média. Já **Compra no cartão (Q8)** e **Transf. interna (Q14)** apresentaram médias negativas, -16,7% e -19,4%, sugerindo tendência de queda no uso desses produtos. Vale destacar que, dado o número reduzido de observações, a média pode ser fortemente influenciada por picos iniciais ou quedas pontuais, o que requer cautela na interpretação.
+O gráfico @fig-eng-produto-total-media mostra que, no engajamento total, **Quote (Q17)** e **PIX (Q11)** se destacam com as maiores médias de *growth rate*, 63,9% e 37,5% respectivamente, indicando crescimento consistente ao longo do período analisado. **Cartão (Q5)** também apresentou crescimento, mas em menor intensidade (16,7%), enquanto **Order (Q20)** permaneceu estável, sem variação média. Já **Compra no cartão (Q8)** e **Transf. interna (Q14)** apresentaram médias negativas, -16,7% e -19,4%, sugerindo tendência de queda no uso desses produtos. Vale destacar que, dado o número reduzido de observações, a média pode ser fortemente influenciada por picos iniciais ou quedas pontuais, o que requer cautela na interpretação.
 
 #### 6. Engajamento multi-produto
 
-Medir quantos usuários estão interagindo com mais de um produto no mesmo período (mês ou ano) e como isso evolui ao longo do tempo. Isso mostra a **amplitude do uso** e pode indicar se os clientes estão se tornando mais integrados ao ecossistema da empresa
+Mede o número de usuários que interagem com mais de um produto ou operação da Bipa dentro do mesmo período (mensal ou anual) e acompanha a evolução desse comportamento ao longo do tempo. Essa métrica indica o nível de integração dos clientes ao ecossistema da empresa, revelando oportunidades para aumentar a adoção cruzada de produtos.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
+#| label:  fig-eng-multi
+#| fig-width: 9 
+#| fig-height: 5
 df_ts <- total_servicos |>
-  rename(new_users_count = multi_users)
+  rename(cumulative_users = multi_users)
 
   growth_metric_plot(df = df_ts,
                      xtitle = "Mês",
@@ -312,19 +336,20 @@ df_ts <- total_servicos |>
   
 ```
 
-##### 6.1 Produndidade média de uso
+O gráfico @fig-eng-multi mostra que entre janeiro e fevereiro de 2025, o número de usuários que utilizaram dois ou mais serviços cresceu 300%, seguido por queda acentuada de 75% em março. Nos meses seguintes, o indicador permaneceu estável até maio, com retomada de 100% em julho. O resultado evidencia que o engajamento multi-produto pode crescer rapidamente quando estimulado, mas é sensível a quedas abruptas.
 
-Mede o número médio de serviços diferentes usados por usuário no mês.
+##### 6.1 Profundidade média de uso
 
--   Mostra se os usuários qeu são multi-produto estão aumentando ou reduzindo a variedade de produtos que usam.
-
--   Compelta o GR: você pode ter crescimento baixo, mas profundidade alta (ou vice-versa).
+Mede o número médio de produtos ou operações diferentes utilizados por cada usuário em um determinado mês. Essa métrica complementa o Growth Rate ao indicar se os clientes multi-produto estão ampliando ou reduzindo a variedade de serviços que utilizam, permitindo identificar mudanças na profundidade de uso mesmo quando o crescimento geral da base é baixo.
 
 ```{r}
 #| message: false
 #| error: false
 #| echo: false
 #| warning: false 
+#| label: fig-profundidade-media
+#| fig-width: 9 
+#| fig-height: 4
 servico_medio_mes |>
   ggplot(aes(x = mes, y = profundidade_media)) +
   geom_line( group = 1) +
@@ -332,7 +357,7 @@ servico_medio_mes |>
   geom_text( aes(label = profundidade_media),
              vjust = -0.5,
              color = 'black',
-             size = 3,
+             size = 4,
              fontface = "plain",
              show.legend = FALSE
              ) +
@@ -347,7 +372,7 @@ servico_medio_mes |>
   
 ```
 
-A profundidade média de uso apresentou variações significativas ao longo do período analisado. O pico observado em fevereiro de 2025 (1,88 serviços por usuário) indica um aumento pontual no uso combinado de diferentes produtos, possivelmente impulsionado por campanhas específicas ou pelo lançamento de funcionalidades. Após esse momento, a média caiu para cerca de 1,2 serviços por usuário entre março e maio, chegando ao ponto mais baixo em junho de 2025 (1,0), quando praticamente não houve uso de múltiplos serviços. Em julho, observa-se uma leve recuperação, mas ainda distante do desempenho máximo registrado. Essa oscilação evidencia que o engajamento multi-produto não é consistente e reforça a necessidade de ações contínuas para incentivar a adoção de mais de um serviço por parte dos usuários, reduzindo a dependência de eventos pontuais para impulsionar a profundidade de uso.
+A profundidade média de uso, mostrada no gráfico @fig-profundidade-media, apresentou variações significativas ao longo do período analisado. O pico observado em fevereiro de 2025 (1,88 serviços por usuário) indica um aumento pontual no uso combinado de diferentes produtos, possivelmente impulsionado por campanhas específicas ou pelo lançamento de funcionalidades. Após esse momento, a média caiu para cerca de 1,2 serviços por usuário entre março e maio, chegando ao ponto mais baixo em junho de 2025 (1,0), quando praticamente não houve uso de múltiplos serviços. Em julho, observa-se uma leve recuperação, mas ainda distante do desempenho máximo registrado. Essa oscilação evidencia que o engajamento multi-produto não é consistente e reforça a necessidade de ações contínuas para incentivar a adoção de mais de um serviço por parte dos usuários, reduzindo a dependência de eventos pontuais para impulsionar a profundidade de uso.
 
 ## Conclusão
 
@@ -420,11 +445,11 @@ show_sql(Q2, "Q2", "Growth de usuários com ajuste de inativos anual")
 
 #### Q3 - Growth da primeira adoção de cartão por usuário
 
-*Objetivo*: Medir a taxa de crescimento da primeira adoção de cartão (primeiro cartão por usuário) ao longo do tempo. A métrica mostra como evolui o número de usuários que passam a ter cartão pela primeira vez em cada mês. Ou seja, crescimento de ativação inicial do produto “cartão”, não de uso recorrente
+*Objetivo*: Medir a taxa de crescimento da primeira adoção de cartão (primeiro cartão por usuário) ao longo do tempo. A métrica mostra como evolui o número de usuários que passam a ter cartão pela primeira vez em cada mês. Ou seja, crescimento de ativação inicial do produto “cartão”, não de uso recorrente.
 
 *Entrada*: `card_holder`
 
-*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent,avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent,avg_growth_rate_percent, max_growth_rate_percent)`
 
 ```{r}
 #| message: false
@@ -472,7 +497,7 @@ show_sql(Q5, "Q5", "Growth de usuários ativos no cartão por mês")
 
 *Entrada*: `card_purchase`
 
-*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent)`
 
 ```{r}
 #| message: false
@@ -520,7 +545,7 @@ show_sql(Q8, "Q8", "Growth de usuários que compram com cartão por mês")
 
 *Entrada*: `pix_transactions`
 
-*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent, max_growth_rate_percent)`
+*Saída*: `table(month, new_users_count, cumulative_users, prev_cumulative, growth_rate_percent, avg_growth_rate_percent, max_growth_rate_percent)`
 
 ```{r}
 #| message: false
@@ -607,7 +632,7 @@ show_sql(Q13, "Q13", "Growth transação interna por mês")
 #| error: false
 #| echo: false
 #| warning: false 
-show_sql(Q14, "Q14", "Growth de usuários ativos fazerndo transação interna por mês")
+show_sql(Q14, "Q14", "Growth de usuários ativos fazendo transação interna por mês")
 ```
 
 #### Q15 - Growth de usuários com primeira criação de quote por mês
@@ -644,7 +669,7 @@ show_sql(Q16, "Q16", "Growth de quotes por mês")
 
 #### Q17 - Growth de usuários ativos gerando quotes por mês
 
-*Objetivo*: Identificar, para cada mês, o número de usuários únicos que criaram pelo menos uam quote e calcular a taxa percentual de crescimento desse volume em relação ao mês anterior, permitindo acompanhar a evolução do engajamento dos usuários com a funcionalidade de geração de cotações.
+*Objetivo*: Identificar, para cada mês, o número de usuários únicos que criaram pelo menos uma quote e calcular a taxa percentual de crescimento desse volume em relação ao mês anterior, permitindo acompanhar a evolução do engajamento dos usuários com a funcionalidade de geração de cotações.
 
 *Entrada*: `quotes`
 
@@ -747,7 +772,7 @@ Todos os códigos utilizados nesta análise estão disponíveis no repositório 
 Abaixo, segue o mapeamento entre as etapas da análise que proporcionaram este relatório ser feito e os respectivos arquivos de código no repositório:
 
 | Etapa da Análise | Descrição | Localização no Repositório |
-|------------------|------------------------------------|------------------|
+|------------------|-----------------------------------|------------------|
 | 1\. Exploração inicial dos dados | Carregamento, verificação de consistência e análise exploratória inicial | `EDA_BIPA_full.qmd` |
 | 2\. Criação do banco de dados | Código para criar o bando de dados SQLite | `ccreating_db.R` |
 | 3\. Funções utilizadas | Script para criação de funções de plots e queries | `funcoes_ciptocoin_analysis.R` |
@@ -762,6 +787,6 @@ Abaixo, segue o mapeamento entre as etapas da análise que proporcionaram este r
 
 -   Passo a passo:
 
-    1.  Clonar o repositório.
-    2.  Executar o script #5 (ele já incorpora os outros).
+    1.  Clonar o repositório;
+    2.  Executar o script #5 (ele já incorpora os outros);
     3.  Comparar os resultados obtidos com os apresentados no relatório.

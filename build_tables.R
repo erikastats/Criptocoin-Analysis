@@ -1,12 +1,27 @@
 
 # Bibliotecas -------------------------------------------------------------
-
+library(glue)
 
 # Importando banco de dados
 source("ccreating_db.R")
 source("funcoes_ciptocoin_analysis.R")
 
 
+# Growth geral ------------------------------------------------------------
+
+Q1 = query_growth_rate_geral( timeformat = "%Y-%m",
+                              colname = "month",
+                              title = "mês"
+)
+
+cum_month <- query_data(Q1)
+
+Q2 = query_growth_rate_geral( timeformat = "%Y",
+                              colname = "year",
+                              title = "ano"
+)
+
+cum_year <- query_data(Q2)
 # Pedido de cartao --------------------------------------------------------
 
 
@@ -153,19 +168,26 @@ mau_orders <-    query_data(Q20)
 seleciona_usuario_servico_mes <- "
 -- 1. Seleciona todos os usuários e data da criação do serviço de cada serviço
 WITH eventos AS (
-    SELECT user_id, 'quotes' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM quotes
+    SELECT user_id, 'quotes' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM quotes
     UNION ALL
-    SELECT user_id, 'orders'  AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM orders
+    SELECT user_id, 'orders'  AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM orders
     UNION ALL
-    SELECT user_id, 'card_purchases' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM card_purchases
+    SELECT user_id, 'card_purchases' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM card_purchases
     UNION ALL
-    SELECT user_id, 'pix_transactions' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM pix_transactions
+    SELECT user_id, 'pix_transactions' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM pix_transactions
     UNION ALL
-    SELECT sender_user_id as user_id, 'internal_transfers' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM internal_transfers
+    SELECT sender_user_id as user_id, 'internal_transfers' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM internal_transfers
     UNION ALL
-    SELECT receiver_user_id as user_id, 'internal_transfers' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM internal_transfers
+    SELECT receiver_user_id as user_id, 'internal_transfers' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM internal_transfers
     UNION ALL
-    SELECT user_id, 'card_holder' AS servico, strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM card_holder
+    SELECT user_id, 'card_holder' AS servico,
+    strftime('%Y-%m', datetime(created_at,'unixepoch')) AS mes FROM card_holder
 ),
 "
 # Multi-produto -----------------------------------------------------------
